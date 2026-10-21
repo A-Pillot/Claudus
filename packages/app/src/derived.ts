@@ -25,8 +25,9 @@ export function useAxleState(corner?: Corner): AxleState | undefined {
     if (warm.current.corner !== corner) warm.current = { corner };
     try {
       let st = solveAxle(corner, art, warm.current);
-      if (!st.right.converged || !st.leftMirror.converged) st = solveAxle(corner, art); // retry from static
-      warm.current = { corner, right: st.right.x, left: st.leftMirror.x };
+      const ok = (a: AxleState) => a.right.converged && (a.leftMirror?.converged ?? true);
+      if (!ok(st)) st = solveAxle(corner, art); // retry from static
+      warm.current = { corner, right: st.right.x, left: st.leftMirror?.x };
       return st;
     } catch {
       return undefined;

@@ -10,7 +10,7 @@
  */
 import { add, cross, dist, mat3MulVec, norm, normalize, rotFromVec, scale, sub, type Vec3 } from '../math/vec3.js';
 import { lmStep, norm2 } from '../math/linalg.js';
-import { GenType, GROUND, NONE, dataPoints, findGen, type Template } from '../template/types.js';
+import { GenType, GROUND, NONE, dataPoints, findGen, hasGen, type Template } from '../template/types.js';
 import { expandPoints } from '../template/define.js';
 
 /** What moves the mechanism: where the ground is, where the body is, and the rack position. */
@@ -19,8 +19,16 @@ export interface Drive {
   groundZ: number;
   /** Maps a body-fixed point from its static position to its current position. Identity when omitted. */
   body?: (p: Vec3) => Vec3;
-  /** Rack travel along +Y applied to the steering attachment point, mm. */
+  /** Rack travel along +Y applied to the steering attachment points (and a rack link part), mm. */
   rack?: number;
+  /** Ground height under the second wheel of a full-axle template. Defaults to groundZ. */
+  groundZ2?: number;
+}
+
+/** A wheel of the mechanism: template indexes of its centre and stub axle points. */
+export interface WheelRef {
+  wc: number;
+  stub: number;
 }
 
 interface Body {
@@ -52,12 +60,14 @@ export class Mechanism {
   private readonly sources: Source[];
   private readonly coincidences: { point: number; body: number }[] = [];
   private readonly links: { a: number; b: number; length: number }[] = [];
-  private readonly strut?: { top: number; slider: number; end: number };
+  private readonly struts: { top: number; slider: number; end: number }[] = [];
   /** Bodies attached only along one line (a link carrying an extra point): their spin about that line is held. */
   private readonly spinLocks: { body: number; axis: Vec3 }[] = [];
-  readonly wheelCentre: number;
-  readonly stubAxle: number;
-  readonly rackPoint?: number;
+  /** One wheel for a corner template, two (right then left) for a full-axle template. */
+  readonly wheels: WheelRef[];
+  /** Ground points the rack moves: steering attachments and the points of a rack link part. */
+  readonly rackPoints: number[] = [];
+  private readonly rackSet: Set<number>;
 
   constructor(template: Template, points: Vec3[], rollingRadius: number) {
     const nData = dataPoints(template).length;
@@ -76,11 +86,22 @@ export class Mechanism {
       for (const part of [p.part1, p.part2]) if (part > 0) onPart[part].push(i);
     });
 
+    // A rack housing (RackMount points) and a rack link (RackLateralMount points) are compliant parts. In
+    // kinematics the housing is fixed to the body and the link moves rigidly with the rack.
+    const partHasGen = (part: number, g: GenType) => onPart[part].some((i) => hasGen(template.points[i], g));
+    const groundLike = new Set<number>();
+    const rackParts = new Set<number>();
+    for (let part = 1; part <= nParts; part++) {
+      const housing = partHasGen(part, GenType.RackMount);
+      if (partHasGen(part, GenType.RackLateralMount) && !housing) rackParts.add(part);
+      if (rackParts.has(part) || housing) groundLike.add(part);
+    }
+
     let offset = 0;
     const bodyOfPart = new Map<number, number>();
     for (let part = 1; part <= nParts; part++) {
       const idx = onPart[part];
-      if (idx.length < 3) continue;
+      if (idx.length < 3 || groundLike.has(part)) continue;
       const centroid = scale(idx.reduce<Vec3>((s, i) => add(s, points[i]), [0, 0, 0]), 1 / idx.length);
       bodyOfPart.set(part, this.bodies.length);
       this.bodies.push({ part, centroid, local: new Map(idx.map((i) => [i, sub(points[i], centroid)])), offset });
@@ -89,7 +110,7 @@ export class Mechanism {
 
     this.sources = template.points.map((p) => {
       const parts = [p.part1, p.part2].filter((x) => x !== NONE);
-      if (parts.includes(GROUND)) return { kind: 'ground' };
+      if (parts.some((x) => x === GROUND || groundLike.has(x))) return { kind: 'ground' };
       const b = parts.find((x) => bodyOfPart.has(x));
       if (b !== undefined) return { kind: 'body', body: bodyOfPart.get(b)! };
       const src: Source = { kind: 'free', offset };
@@ -103,7 +124,8 @@ export class Mechanism {
     // Only bodies that carry nothing else the solver constrains: a wheel or strut body's spin is real motion.
     const memberships = template.points.map((p) => [p.part1, p.part2].filter((x) => x !== NONE).length);
     const constrained = new Set(
-      [GenType.WheelCentre, GenType.StubAxle, GenType.StrutSliderPoint, GenType.StrutEndPoint]
+      [GenType.WheelCentre, GenType.StubAxle, GenType.StrutSliderPoint, GenType.StrutEndPoint,
+        GenType.WheelCentre2, GenType.StubAxle2, GenType.StrutSliderPoint2, GenType.StrutEndPoint2]
         .map((g) => findGen(template, g))
         .filter((p) => p !== undefined)
         .map((p) => this.index.get(p!.no)!),
@@ -133,24 +155,56 @@ export class Mechanism {
 
     for (let part = 1; part <= nParts; part++) {
       const idx = onPart[part];
-      if (idx.length === 2) this.links.push({ a: idx[0], b: idx[1], length: dist(points[idx[0]], points[idx[1]]) });
+      if (idx.length === 2 && !groundLike.has(part)) this.links.push({ a: idx[0], b: idx[1], length: dist(points[idx[0]], points[idx[1]]) });
       if (idx.length < 2) throw new Error(`Template ${template.slot}: part ${part} has fewer than two points`);
     }
 
-    const wc = findGen(template, GenType.WheelCentre);
-    const stub = findGen(template, GenType.StubAxle);
-    if (!wc || !stub) throw new Error(`Template ${template.slot} has no wheel centre or stub axle point`);
-    this.wheelCentre = this.index.get(wc.no)!;
-    this.stubAxle = this.index.get(stub.no)!;
+    const at = (g: GenType) => {
+      const p = findGen(template, g);
+      return p ? this.index.get(p.no)! : undefined;
+    };
+    const wc = at(GenType.WheelCentre);
+    const stub = at(GenType.StubAxle);
+    if (wc === undefined || stub === undefined) throw new Error(`Template ${template.slot} has no wheel centre or stub axle point`);
+    this.wheels = [{ wc, stub }];
+    const wc2 = at(GenType.WheelCentre2);
+    if (wc2 !== undefined) this.wheels.push({ wc: wc2, stub: at(GenType.StubAxle2) ?? stub });
 
-    const slider = findGen(template, GenType.StrutSliderPoint);
-    const end = findGen(template, GenType.StrutEndPoint);
-    const top = findGen(template, GenType.Damper1ToBody);
-    if (slider && end && top)
-      this.strut = { top: this.index.get(top.no)!, slider: this.index.get(slider.no)!, end: this.index.get(end.no)! };
+    const strutGens: [GenType, GenType, GenType][] = [
+      [GenType.StrutSliderPoint, GenType.StrutEndPoint, GenType.Damper1ToBody],
+      [GenType.StrutSliderPoint2, GenType.StrutEndPoint2, GenType.Damper2ToBody],
+    ];
+    for (const [s, e, t] of strutGens) {
+      const [slider, end, top] = [at(s), at(e), at(t)];
+      if (slider !== undefined && end !== undefined && top !== undefined) this.struts.push({ top, slider, end });
+    }
 
-    const rack = findGen(template, GenType.SteeringAttachment);
-    if (rack && this.sources[this.index.get(rack.no)!].kind === 'ground') this.rackPoint = this.index.get(rack.no);
+    template.points.forEach((p, i) => {
+      if (this.sources[i].kind !== 'ground') return;
+      const steer = hasGen(p, GenType.SteeringAttachment) || hasGen(p, GenType.SteeringAttachment2);
+      if (steer || rackParts.has(p.part1) || rackParts.has(p.part2)) this.rackPoints.push(i);
+    });
+    // The first steering attachment leads, so a corner's rackPoint is what it always was.
+    this.rackPoints.sort((a, b) => Number(hasGen(template.points[b], GenType.SteeringAttachment)) - Number(hasGen(template.points[a], GenType.SteeringAttachment)));
+    this.rackSet = new Set(this.rackPoints);
+  }
+
+  get wheelCentre(): number {
+    return this.wheels[0].wc;
+  }
+
+  get stubAxle(): number {
+    return this.wheels[0].stub;
+  }
+
+  /** True when the template models both wheels of an axle. */
+  get fullAxle(): boolean {
+    return this.wheels.length > 1;
+  }
+
+  /** A ground point the rack moves, when the template is steerable. */
+  get rackPoint(): number | undefined {
+    return this.rackPoints[0];
   }
 
   /** Unknown vector for the static position. */
@@ -173,7 +227,7 @@ export class Mechanism {
 
   private groundPoint(i: number, drive: Drive): Vec3 {
     let p = this.staticPoints[i];
-    if (i === this.rackPoint && drive.rack) p = [p[0], p[1] + drive.rack, p[2]];
+    if (drive.rack && this.rackSet.has(i)) p = [p[0], p[1] + drive.rack, p[2]];
     return drive.body ? drive.body(p) : p;
   }
 
@@ -199,12 +253,15 @@ export class Mechanism {
       // twist component of the body's rotation vector, scaled to be comparable with mm residuals
       r.push(100 * (x[o + 3] * l.axis[0] + x[o + 4] * l.axis[1] + x[o + 5] * l.axis[2]));
     }
-    if (this.strut) {
-      const P = pos(this.strut.slider);
-      const axis = normalize(sub(pos(this.strut.end), P));
-      r.push(...cross(sub(pos(this.strut.top), P), axis));
+    for (const s of this.struts) {
+      const P = pos(s.slider);
+      const axis = normalize(sub(pos(s.end), P));
+      r.push(...cross(sub(pos(s.top), P), axis));
     }
-    r.push(wheelLowestZ(pos(this.wheelCentre), pos(this.stubAxle), this.rollingRadius) - drive.groundZ);
+    this.wheels.forEach((w, k) => {
+      const ground = k === 0 ? drive.groundZ : (drive.groundZ2 ?? drive.groundZ);
+      r.push(wheelLowestZ(pos(w.wc), pos(w.stub), this.rollingRadius) - ground);
+    });
     return r;
   }
 

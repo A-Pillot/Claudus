@@ -10,10 +10,12 @@ export function newSuspension(slot: number): SuspensionData {
 
 /** A new model with one end set to a built-in template's defaults, like SHARK's File / New. */
 export function newModel(slot: number, end: End = 'front'): Model {
+  const params = defaultParams();
+  if (getTemplate(slot).rigidAxle) params[end === 'front' ? 'frontSuspensionType' : 'rearSuspensionType'] = 2;
   return {
     version: [8, 3],
     versionExtra: [],
-    params: defaultParams(),
+    params,
     [end]: newSuspension(slot),
     tolerances: [1e-10, 0.05, 0.05],
     titles: [],

@@ -8,21 +8,29 @@ SHARK `.dat` model files, solves the suspension kinematics, and lists the same s
 ## Status
 
 **Phase 1, the calculation core (`packages/core`)**
-- **Templates:** 21 built-in suspension types: 1, 2, 3, 4, 6, 7, 10, 11, 12, 14, 15, 16, 17, 18, 19, 20,
-  22, 24, 25, 27 and 28.
+- **Templates:** 27 built-in suspension types: 1 to 12 and 14 to 28.
+  - Corner models: 1, 2, 3, 4, 6, 7, 10, 11, 12, 14, 15, 16, 17, 18, 19, 20, 22, 24, 25, 27 and 28.
+  - Rigid axles: 5, 8 and 21 (Panhard rod, Watts linkage) and 9 (twin upper links).
+  - Two-sided double wishbones: 23 (anti-roll bar) and 26 (two-part compliant rack).
   - Point numbers and labels follow the SHARK help.
   - Default coordinates come from SHARK's sample files where there is one. SHARK shipped no sample for
-    types 19, 20, 22, 24, 25, 27 and 28, so their defaults are designed layouts.
+    types 5, 8, 9, 19, 20, 21, 22, 24, 25, 27 and 28, so their defaults are designed layouts. Types 23 and
+    26 are built from type 1 with the same tools SHARK's Edit menu offers.
   - Templates with linked lower or upper arms use a virtual steering axis. Like SHARK, Claudus finds it
     from a small steering movement.
 - **Files:** SHARK `.dat` model files are read and written. Sections Claudus does not use yet, such as
   compliance, forces and Raven data, are kept unchanged.
 - **Solver:** handles bump and rebound, body roll about the static roll centre, rack steer, and
   combinations of these.
+- **Full axles:** templates that model both wheels are solved in one go, with bump moving both wheels.
+  For a rigid axle the roll centre is where the normals to the two contact paths meet for opposed wheel
+  travel, which is the centre the axle rolls about relative to the body.
+- **Template tools:** Convert Corner to Axle, Add Roll Bar and Add Two Part Rack, as functions in the core.
+  They get their menu entries with the template editor.
 - **Derivatives:** the full SHARK set, plus a formatted SDF listing.
 
 **Phase 2, the app (`packages/app`)**
-- **3D view:** both corners of the axle, with wheels, springs, dampers and the roll centre. You can orbit
+- **3D view:** both sides of the axle, with wheels, springs, dampers and the roll centre. You can orbit
   the view, and clicking a point selects it.
 - **Motion:** sliders for bump, roll and steer, each with an animate button.
 - **Live readouts:** camber, toe, castor, kingpin, trails, offsets, roll centre and track.
@@ -34,9 +42,8 @@ SHARK `.dat` model files, solves the suspension kinematics, and lists the same s
 - **Desktop:** a Tauri desktop app with native file dialogs.
 
 Next up:
-- The rigid axles and the two-sided templates (5, 8, 9, 21, 23, 26 and 29).
-- The template editor and the 2D module.
-- Compliance.
+- The template editor (with the Edit menu template tools) and the 2D module.
+- Compliance, including type 29 (twist beam), which needs it to move at all.
 - Modal analysis, the forced-damped response and the optimiser.
 
 ## Use
@@ -84,6 +91,13 @@ Each part with three or more points is a rigid body. A part with two points is a
 - A point shared by two parts is a joint between them.
 - The wheel keeps its lowest point on the ground plane.
 - A Macpherson strut top stays on the strut axis.
+- A five-link rigid axle is over-constrained in roll. As in SHARK, it is split at a revolute on the centre
+  line that turns about the axle tube, so the two halves can twist instead of binding. Compliance will hold
+  that joint with a stiff bush.
+- A rack housing is fixed to the body and a rack link moves with the rack. Their bushes only matter in
+  compliance.
+- An anti-roll bar is two halves turning in their mounts, joined by a revolute. Its bush is the bar's
+  torsional rate, so in kinematics the halves turn freely.
 
 The constraints are solved with a damped least-squares (Levenberg-Marquardt) method. Redundant joints,
 such as revolutes modelled as two ball joints, are therefore not a problem.

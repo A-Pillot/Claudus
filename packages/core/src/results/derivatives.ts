@@ -4,7 +4,7 @@
  */
 import { deg, mirrorY, sub, type Vec3 } from '../math/vec3.js';
 import type { Model, VehicleParams } from '../model/types.js';
-import { Corner, type CornerRates, type CornerState } from '../solver/corner.js';
+import { Corner, intersectYZ, type CornerRates, type CornerState } from '../solver/corner.js';
 import { spindleAxis } from '../solver/mechanism.js';
 
 export interface WheelGeometry {
@@ -22,11 +22,17 @@ export interface WheelGeometry {
   wc: Vec3;
 }
 
-/** Wheel angles and steering-axis offsets for a solved right-hand corner. */
-export function wheelGeometry(c: Corner, points: Vec3[], groundZ: number, state?: CornerState): WheelGeometry {
-  const wc = points[c.mech.wheelCentre];
-  const a = spindleAxis(wc, points[c.mech.stubAxle]);
-  const tcp = c.tcp(points);
+/**
+ * Wheel angles and steering-axis offsets for a solved corner. `wheel` 1 is the left wheel of a full-axle
+ * template; its values come out in the right-hand convention (computed on the mirror image), so both sides
+ * read the same way.
+ */
+export function wheelGeometry(c: Corner, points: Vec3[], groundZ: number, state?: CornerState, wheel = 0): WheelGeometry {
+  const m = wheel === 0 ? (p: Vec3) => p : mirrorY;
+  const side = c.sides[wheel];
+  const wc = m(points[side.wc]);
+  const a = spindleAxis(wc, m(points[side.stub]));
+  const tcp = m(c.tcp(points, wheel));
   const g: WheelGeometry = {
     camber: deg(-Math.asin(a[2])),
     toeSae: deg(Math.atan2(-a[0], a[1])),
@@ -41,9 +47,9 @@ export function wheelGeometry(c: Corner, points: Vec3[], groundZ: number, state?
     tcp,
     wc,
   };
-  const axis = state ? c.steeringAxisAt(state) : c.steeringAxis(points);
+  const axis = state ? c.steeringAxisAt(state, undefined, wheel) : c.steeringAxis(points, wheel);
   if (axis) {
-    const [lo, hi] = axis;
+    const [lo, hi] = axis.map(m);
     const u = sub(hi, lo);
     g.castor = deg(Math.atan2(u[0], u[2]));
     g.kingpin = deg(Math.atan2(-u[1], u[2]));
@@ -158,7 +164,7 @@ export function bumpSweep(c: Corner, p: VehicleParams, values = range(-p.rebound
   const rows = sweep(values, (v, w) => c.solve({ bump: v }, w), (st) => {
     const r = c.rates(st);
     const g = wheelGeometry(c, st.points, st.groundZ, st);
-    const rc = c.rollCentreBump(st, r);
+    const rc = c.fullAxle ? c.rollCentreAxle(st)[1] : c.rollCentreBump(st, r);
     return {
       bump: st.articulation.bump,
       ...g,
@@ -177,22 +183,31 @@ export function bumpSweep(c: Corner, p: VehicleParams, values = range(-p.rebound
   return values.map((v) => rows.get(v)!);
 }
 
-/** Intersection of two lines in the YZ plane, each given by a point and a direction. */
-function intersectYZ(p1: Vec3, d1: [number, number], p2: Vec3, d2: [number, number]): [number, number] {
-  const det = d1[0] * -d2[1] + d2[0] * d1[1];
-  if (Math.abs(det) < 1e-14) return [NaN, NaN];
-  const by = p2[1] - p1[1];
-  const bz = p2[2] - p1[2];
-  const t = (by * -d2[1] + d2[0] * bz) / det;
-  return [p1[1] + t * d1[0], p1[2] + t * d1[1]];
-}
-
 export function rollSweep(c: Corner, p: VehicleParams, values = range(-p.rollAngle, p.rollAngle, p.rollIncrement)): RollRow[] {
   const stat = c.solve({});
   const tcp0 = c.tcp(stat.points);
   const d0 = c.damperLength(stat.points);
   const s0 = c.springLength(stat.points);
   const sign = c.end === 'front' ? -1 : 1;
+  if (c.fullAxle) {
+    const rows = sweep(values, (v, w) => c.solve({ roll: v }, w), (st): RollRow => {
+      const r = c.wheelRates(st, -1)[0];
+      const g = wheelGeometry(c, st.points, st.groundZ, st);
+      const [y, z] = c.rollCentreAxle(st);
+      return {
+        roll: st.articulation.roll,
+        ...g,
+        damperRatio: ratio(r.tcp[2], r.damperLength),
+        springRatio: ratio(r.tcp[2], r.springLength),
+        rollCentre: [(c.tcp(st.points, 0)[0] + c.tcp(st.points, 1)[0]) / 2, y, z - c.z0],
+        halfTrackChange: g.tcp[1] - tcp0[1],
+        wheelbaseChange: sign * (g.tcp[0] - tcp0[0]),
+        damperTravel: c.damperLength(st.points) - d0,
+        springTravel: c.springLength(st.points) - s0,
+      };
+    });
+    return values.map((v) => rows.get(v)!);
+  }
   const states = sweep(values.flatMap((v) => [v, -v]).filter((v, i, a) => a.indexOf(v) === i).sort((a, b) => a - b),
     (v, w) => c.solve({ roll: v }, w), (st) => ({ st, r: c.rates(st) }));
   return values.map((v) => {
@@ -221,13 +236,20 @@ export function rollSweep(c: Corner, p: VehicleParams, values = range(-p.rollAng
 export function steerSweep(c: Corner, p: VehicleParams, values = range(-p.steerTravel, p.steerTravel, p.steerIncrement)): SteerRow[] {
   if (c.mech.rackPoint === undefined) return [];
   const all = [...new Set(values.flatMap((v) => [v, -v]))].sort((a, b) => a - b);
-  const geo = sweep(all, (v, w) => c.solve({ rack: v }, w), (st) => wheelGeometry(c, st.points, st.groundZ, st));
+  // Right wheel at each rack position, and the left wheel in right-hand convention.
+  const pairs = sweep(all, (v, w) => c.solve({ rack: v }, w), (st) => ({
+    right: wheelGeometry(c, st.points, st.groundZ, st),
+    left: c.fullAxle ? wheelGeometry(c, st.points, st.drive.groundZ2 ?? st.groundZ, st, 1) : undefined,
+  }));
+  const geo = new Map([...pairs].map(([v, p]) => [v, p.right]));
+  // On a corner model the left wheel at rack +v is the mirror of the right wheel at rack -v.
+  const leftAt = (v: number) => pairs.get(v)!.left ?? geo.get(-v)!;
   const g0 = geo.get(0) ?? wheelGeometry(c, c.solve({}).points, c.z0);
   const track = 2 * g0.tcp[1];
   const L = p.wheelbase;
   return values.map((v) => {
     const right = geo.get(v)!;
-    const left = geo.get(-v)!; // left wheel at rack +v mirrors the right wheel at rack -v
+    const left = leftAt(v);
     // Toe-out on the right wheel means a turn to the right, so the right wheel is the inner one.
     const dR = right.toeSae - g0.toeSae;
     const dL = left.toeSae - g0.toeSae;
@@ -264,8 +286,8 @@ export interface StaticValues extends WheelGeometry {
 
 export function staticValues(c: Corner): StaticValues {
   const st = c.solve({});
-  const r = c.rates(st);
-  return { ...wheelGeometry(c, st.points, st.groundZ, st), rollCentreHeight: c.rollCentreBump(st, r) - c.z0 };
+  const rc = c.fullAxle ? c.rollCentreAxle(st)[1] : c.rollCentreBump(st, c.rates(st));
+  return { ...wheelGeometry(c, st.points, st.groundZ, st), rollCentreHeight: rc - c.z0 };
 }
 
 export interface EndAnalysis {
@@ -298,10 +320,13 @@ export function analyse(m: Model): EndAnalysis[] {
 
 
 export interface AxleState {
-  /** Right-hand corner. */
+  /** Right-hand corner. On a full-axle template this one state holds both wheels. */
   right: CornerState;
-  /** The left-hand corner, solved as its right-hand mirror image (mirror its points with mirrorY to draw it). */
-  leftMirror: CornerState;
+  /**
+   * The left-hand corner, solved as its right-hand mirror image (mirror its points with mirrorY to draw it).
+   * Absent on a full-axle template, where `right` already holds the left wheel.
+   */
+  leftMirror?: CornerState;
   geometryRight: WheelGeometry;
   geometryLeft: WheelGeometry;
   /** Kinematic roll centre in absolute coordinates (where the two contact-path normals meet). */
@@ -314,6 +339,17 @@ export function solveAxle(c: Corner, a: { bump?: number; roll?: number; rack?: n
   const roll = a.roll ?? 0;
   const rack = a.rack ?? 0;
   const right = c.solve({ bump, roll, rack }, warm?.right);
+  if (c.fullAxle) {
+    const [y, z] = c.rollCentreAxle(right);
+    const tr = c.tcp(right.points, 0);
+    const tl = c.tcp(right.points, 1);
+    return {
+      right,
+      geometryRight: wheelGeometry(c, right.points, right.groundZ, right),
+      geometryLeft: wheelGeometry(c, right.points, right.drive.groundZ2 ?? right.groundZ, right, 1),
+      rollCentre: [(tr[0] + tl[0]) / 2, y, z],
+    };
+  }
   const leftMirror = c.solve({ bump, roll: -roll, rack: -rack }, warm?.left);
   const rr = c.rates(right);
   const rl = c.rates(leftMirror);

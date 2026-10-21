@@ -60,10 +60,14 @@ export enum PointType {
   PreSolveKineFix = 9,
 }
 
-/** A dummy point sits `offset` mm from point `at`, in the direction from point dir[0] to point dir[1]. */
+/**
+ * A dummy point sits `offset` mm from point `at`, in the direction from point dir[0] to point dir[1], or along
+ * the fixed vector `vec` when no points give the direction (a revolute along the vehicle's X axis, say).
+ */
 export interface DummySpec {
   at: number;
-  dir: [number, number];
+  dir?: [number, number];
+  vec?: Vec3;
   offset: number;
 }
 
@@ -114,6 +118,8 @@ export interface Template {
   graphics: GraphicElement[];
   /** True when the template models both wheels of an axle (rigid axles, full-axle conversions). */
   fullAxle?: boolean;
+  /** True for a rigid (beam) axle, where both wheels share one axle. Sets the model's suspension type. */
+  rigidAxle?: boolean;
   /** Where the template came from. */
   source?: 'builtin' | 'user' | 'custom' | 'file';
 }

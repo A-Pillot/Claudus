@@ -10,6 +10,7 @@ import { GenType as G } from './types.js';
 import { defineTemplate } from './define.js';
 import type { Template } from './types.js';
 import { MORE_TEMPLATES } from './builtin2.js';
+import { RIGID_AXLES, RIGID_AXLE_ROLLING_RADIUS, twoSidedTemplates } from './builtin3.js';
 
 // Common double-wishbone point labels (types 1, 6, 14, 15, 17...)
 const DW = {
@@ -337,9 +338,9 @@ const type17 = defineTemplate({
   ],
 });
 
-export const BUILTIN_TEMPLATES: Template[] = [type1, type2, type3, type4, type6, type7, type10, type11, type14, type15, type16, type17, ...MORE_TEMPLATES].sort(
+export const BUILTIN_TEMPLATES: Template[] = [type1, type2, type3, type4, type6, type7, type10, type11, type14, type15, type16, type17, ...MORE_TEMPLATES, ...RIGID_AXLES, ...twoSidedTemplates(type1)].sort(
   (a, b) => a.slot - b.slot,
 );
 
 /** Default rolling radius (mm) for each built-in template's sample model. */
-export const BUILTIN_ROLLING_RADIUS: Record<number, number> = { 16: 310 };
+export const BUILTIN_ROLLING_RADIUS: Record<number, number> = { 16: 310, ...RIGID_AXLE_ROLLING_RADIUS };

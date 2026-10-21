@@ -147,7 +147,19 @@ function Plot({ data, series, xLabel, yLabel, marker }: { data: uPlot.AlignedDat
     const opts: uPlot.Options = {
       width: el.clientWidth,
       height: Math.max(140, el.clientHeight),
-      scales: { x: { time: false } },
+      scales: {
+        x: { time: false },
+        // Keep a flat curve flat: without a minimum span uPlot zooms into solver round-off.
+        y: {
+          range: (_u, min, max) => {
+            if (min == null || max == null || !Number.isFinite(min) || !Number.isFinite(max)) return [-1, 1];
+            const span = Math.max(max - min, 1e-3 * Math.max(1, Math.abs(min), Math.abs(max)), 0.01);
+            const mid = (max + min) / 2;
+            const pad = span * 0.55;
+            return [mid - pad, mid + pad];
+          },
+        },
+      },
       legend: { show: true },
       cursor: { drag: { x: true, y: false } },
       axes: [{ ...axisStyle, label: xLabel }, { ...axisStyle, label: yLabel, size: 60 }],
