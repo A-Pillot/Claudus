@@ -69,7 +69,7 @@ export function SolveMenu() {
     <div className="menu" ref={m.ref}>
       <button onClick={() => m.setOpen(!m.open)} className={m.open ? 'on' : ''}>Solve ▾</button>
       {m.open && (
-        <div className="menulist" role="menu">
+        <div className="menulist" role="menu" style={{ left: 'auto', right: 0 }}>
           <div className="menuhead">Motion (bump)</div>
           <Check on={modes.motion === 'ground'} onClick={() => modes.set({ motion: 'ground' })}>Moving ground plane</Check>
           <Check on={modes.motion === 'body'} onClick={() => modes.set({ motion: 'body' })}>Moving body</Check>

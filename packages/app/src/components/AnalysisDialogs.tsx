@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   around, canSetStaticAngles, dataPoints, defaultCombined, evenBumpValues, getTemplate, hasTemplate, limitOf,
   setAllLimits, setLimit, setSteeringBox, setSteeringType, setStaticAngles, staticAngles, steeringOf, DEFAULT_TOLERANCE,
@@ -109,6 +109,8 @@ function CombinedDialog() {
   const model = useApp((s) => s.model);
   const steps = (model.combined ?? defaultCombined(model.params)).steps;
   useUnitSettings();
+  // Opening the editor makes the default path the model's own, so the sweep, graphs and listing use it.
+  useEffect(() => { if (!model.combined) replace({ ...model, combined: defaultCombined(model.params) }); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const save = (next: typeof steps) => replace({ ...model, combined: { steps: next } });
   const edit = (i: number, k: 'bump' | 'rack', v: number) => save(steps.map((s, j) => (j === i ? { ...s, [k]: v } : s)));
   return (

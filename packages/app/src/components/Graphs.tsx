@@ -290,10 +290,10 @@ function GraphCard({ results, tolerance, mode, varKey, onChange }: { results?: E
       {data ? (
         <Plot
           data={data} series={series} metas={metas} swap={opts.swap} view={view} onView={setView} showSlope={vis.derivative}
-          xLabel={`${def.x.label} (${unitText(def.x.unit, units)})`} yLabel={y.unit ? `${y.label} (${unitText(y.unit, units)})` : y.label} marker={current}
+          xLabel={def.x.unit ? `${def.x.label} (${unitText(def.x.unit, units)})` : def.x.label} yLabel={y.unit ? `${y.label} (${unitText(y.unit, units)})` : y.label} marker={current}
         />
       ) : (
-        <div className="muted pad">{results ? 'Not applicable to this model.' : 'Calculating…'}</div>
+        <div className="muted pad">{results ? (mode === 'combined' ? 'No combined motion path. Define one with Data / Set / edit combined motion profile (steerable suspensions only).' : 'Not applicable to this model.') : 'Calculating…'}</div>
       )}
       {styling && <GraphStyleDialog options={opts} onChange={setOpts} onClose={() => setStyling(false)} />}
       {menu && (
