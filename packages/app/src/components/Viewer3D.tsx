@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { GenType, GROUND, findGen, mirrorY, type AxleState, type ComplianceResult, type Corner, type Vec3 } from '@claudus/core';
 import { useApp } from '../store';
 import { pickPoint } from '../graphicsActions';
+import { fmtUnit, useUnitSettings } from '../units';
 import { GraphicElements } from './GraphicShapes';
 import { CogScene, ComplianceScene } from './ComplianceScene';
 
@@ -51,6 +52,7 @@ export function Viewer3D({ corner, state, detail }: Props) {
 }
 
 function Side({ corner, points, mirrored }: { corner: Corner; points: Vec3[]; mirrored: boolean }) {
+  useUnitSettings();
   const t = corner.template;
   const selected = useApp((s) => s.selected);
   const select = useApp((s) => s.select);
@@ -91,7 +93,7 @@ function Side({ corner, points, mirrored }: { corner: Corner; points: Vec3[]; mi
               <Html center={false} zIndexRange={[5, 0]} style={{ pointerEvents: 'none', transform: 'translate(8px, -14px)' }}>
                 <div className="plabel">
                   {view.pointNos && <b>{tp.no}</b>}
-                  {view.pointValues && <span> {points[i].map((v) => v.toFixed(1)).join(', ')}</span>}
+                  {view.pointValues && <span> {points[i].map((v) => fmtUnit('mm', v, 1)).join(', ')}</span>}
                 </div>
               </Html>
             )}

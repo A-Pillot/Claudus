@@ -3,6 +3,7 @@ import { partMasses, type AxisRef, type Corner, type AxleState, type PartMass, t
 import { useApp } from '../store';
 import { AxisEditor, Dlg, useEndInfo } from './ComplianceDialogs';
 import { NumberCell } from './PointTable';
+import { fmtUnit, unitText, useUnitSettings } from '../units';
 
 const COG_LABEL: Record<AxisRef['kind'], string> = { none: 'Part centroid', point: 'Model point', rel: 'Offset from centroid', abs: 'Absolute position' };
 const INERTIA = ['Ixx', 'Iyy', 'Izz', 'Ixy', 'Ixz', 'Iyz'];
@@ -16,6 +17,7 @@ export function MassDialog({ corner, state }: { corner?: Corner; state?: AxleSta
 }
 
 function MassBody({ corner, state, onClose }: { corner?: Corner; state?: AxleState; onClose: () => void }) {
+  useUnitSettings();
   const { end, template, data } = useEndInfo();
   const edit = useApp((s) => s.editEndCompliance);
   const [sel, setSel] = useState(1);
@@ -44,7 +46,7 @@ function MassBody({ corner, state, onClose }: { corner?: Corner; state?: AxleSta
     update((x) => { x.cog = kind === 'none' ? { kind } : kind === 'point' ? { kind, point: first } : { kind, v: kind === 'rel' ? [0, 0, 0] : (r?.cog ?? [0, 0, 0]) }; });
   };
   const cog = m.cog;
-  const fmt = (v: number) => v.toFixed(1);
+  const fmt = (v: number) => fmtUnit('mm', v, 1);
 
   return (
     <Dlg title={`Part mass data and C of G (${end})`} onClose={onClose} wide>
@@ -54,17 +56,17 @@ function MassBody({ corner, state, onClose }: { corner?: Corner; state?: AxleSta
             const has = data.masses?.some((x) => x.part === i + 1);
             return (
               <button key={i} role="option" aria-selected={sel === i + 1} className={sel === i + 1 ? 'on' : ''} onClick={() => setSel(i + 1)}>
-                <b>{i + 1}</b> {name} <span className="muted small">{resolved[i] ? `${resolved[i].mass} kg` : ''}{has ? '' : ' default'}</span>
+                <b>{i + 1}</b> {name} <span className="muted small">{resolved[i] ? `${fmtUnit('kg', resolved[i].mass, 2).replace(/\.?0+$/, '')} ${unitText('kg')}` : ''}{has ? '' : ' default'}</span>
               </button>
             );
           })}
-          <div className="muted small pad">Total mass {total.toFixed(2)} kg</div>
+          <div className="muted small pad">Total mass {fmtUnit('kg', total, 2)} {unitText('kg')}</div>
         </div>
         <div className="massdetail" data-testid="mass-detail">
           <b>Part {sel}: {parts[sel - 1]}</b>
           <div className="row">
-            <label className="vlabel">Mass (kg)</label>
-            <NumberCell value={m.mass} onCommit={(v) => update((x) => { x.mass = Math.max(0, v); })} />
+            <label className="vlabel">Mass ({unitText('kg')})</label>
+            <NumberCell unit="kg" value={m.mass} onCommit={(v) => update((x) => { x.mass = Math.max(0, v); })} />
             {!given && <span className="muted small">default; edit to set</span>}
           </div>
           <div className="row">
@@ -78,10 +80,10 @@ function MassBody({ corner, state, onClose }: { corner?: Corner; state?: AxleSta
               </select>
             )}
             {(cog.kind === 'rel' || cog.kind === 'abs') && [0, 1, 2].map((k) => (
-              <NumberCell key={k} value={cog.v[k]} onCommit={(v) => update((x) => { if (x.cog.kind === 'rel' || x.cog.kind === 'abs') x.cog = { kind: x.cog.kind, v: x.cog.v.map((q, j) => (j === k ? v : q)) as Vec3 }; })} />
+              <NumberCell key={k} unit="mm" value={cog.v[k]} onCommit={(v) => update((x) => { if (x.cog.kind === 'rel' || x.cog.kind === 'abs') x.cog = { kind: x.cog.kind, v: x.cog.v.map((q, j) => (j === k ? v : q)) as Vec3 }; })} />
             ))}
           </div>
-          {r && <div className="muted small" data-testid="mass-cog">C of G at ({r.cog.map(fmt).join(', ')}) mm in the current position</div>}
+          {r && <div className="muted small" data-testid="mass-cog">C of G at ({r.cog.map(fmt).join(', ')}) {unitText('mm')} in the current position</div>}
           <AxisEditor label="Point on local z axis" value={m.zAxis} fallback={[0, 0, 100]} onChange={(v) => update((x) => { x.zAxis = v; })} />
           <AxisEditor label="Point in local x-z plane" value={m.xzPlane} fallback={[100, 0, 0]} onChange={(v) => update((x) => { x.xzPlane = v; })} />
           <p className="muted small">Axis points are measured from the C of G; with none, the local axes are the global axes.</p>

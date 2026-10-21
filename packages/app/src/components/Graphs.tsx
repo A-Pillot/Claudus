@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
-import { deviation, lineFromData, lineKey, measureColumns, type End, type EndAnalysis, type Sweep, type UserLine } from '@claudus/core';
+import { deviation, lineFromData, lineKey, measureColumns, unitFactor, unitText, type End, type EndAnalysis, type Sweep, type UserLine } from '@claudus/core';
 import { useApp } from '../store';
 import { useLab } from '../lab';
+import { useUnitSettings } from '../units';
 
 type Mode = 'bump' | 'roll' | 'steer';
 
@@ -118,7 +119,7 @@ export function allLines(results: EndAnalysis[] | undefined, end: End): UserLine
 
 const SCOPE_COLOURS = ['#b39ddb', '#80cbc4', '#e6ee9c', '#ffab91', '#90a4ae'];
 const END_NAME = { front: 'Front', rear: 'Rear' } as const;
-const fixed = (v: number | undefined) => (v === undefined ? '–' : v.toFixed(3));
+const fixed = (v: number | undefined, f = 1) => (v === undefined ? '–' : (v * f).toFixed(3));
 
 function GraphCard({ results, mode, varKey, onChange }: { results?: EndAnalysis[]; mode: Mode; varKey: string; onChange: (m: Mode, k: string) => void }) {
   const base = VARIABLES[mode];
@@ -126,7 +127,10 @@ function GraphCard({ results, mode, varKey, onChange }: { results?: EndAnalysis[
   const def = useMemo(() => ({ x: base.x, ys: [...base.ys, ...extra] }), [base, extra]);
   const y = def.ys.find((v) => v.key === varKey) ?? def.ys[0];
   const art = useApp((s) => s.art);
-  const current = mode === 'bump' ? art.bump : mode === 'roll' ? art.roll : art.rack;
+  const units = useUnitSettings();
+  const fx = unitFactor(def.x.unit, units);
+  const fy = unitFactor(y.unit, units);
+  const current = (mode === 'bump' ? art.bump : mode === 'roll' ? art.roll : art.rack) * fx;
   const userLines = useLab((s) => s.userLines);
   const scope = useLab((s) => s.scope);
   const vis = useLab((s) => s.graphVis);
@@ -142,7 +146,7 @@ function GraphCard({ results, mode, varKey, onChange }: { results?: EndAnalysis[
     if (!ends.length) return { data: null, series: [] };
     type Col = { s: uPlot.Series; m: Map<number, number | null> };
     const cols: Col[] = [];
-    const rowsMap = (rows: any[]) => new Map<number, number | null>(rows.map((r) => { const v = y.get(r); return [def.x.get(r), v === undefined || !Number.isFinite(v) ? null : v]; }));
+    const rowsMap = (rows: any[]) => new Map<number, number | null>(rows.map((r) => { const v = y.get(r); return [def.x.get(r) * fx, v === undefined || !Number.isFinite(v) ? null : v * fy]; }));
     // Scope lines first so the data line is drawn on top of them.
     if (vis.scope)
       scope.forEach((snap, i) => {
@@ -162,7 +166,7 @@ function GraphCard({ results, mode, varKey, onChange }: { results?: EndAnalysis[
         if (!l) continue;
         cols.push({
           s: { label: `User${ends.length > 1 ? ' ' + END_NAME[e.end].toLowerCase() : ''}`, stroke: '#7ee787', width: 2, spanGaps: true, points: { show: true, size: 7, fill: '#7ee787', stroke: '#7ee787' } },
-          m: new Map(l.points.map(([px, py]) => [px, py] as [number, number | null])),
+          m: new Map(l.points.map(([px, py]) => [px * fx, py * fy] as [number, number | null])),
         });
       }
     for (const e of ends)
@@ -173,7 +177,7 @@ function GraphCard({ results, mode, varKey, onChange }: { results?: EndAnalysis[
       series: cols.map((c) => c.s),
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ends, y, def, userLines, scope, vis.scope, vis.userLine, mode]);
+  }, [ends, y, def, userLines, scope, vis.scope, vis.userLine, mode, fx, fy]);
 
   const devs = useMemo(() => ends.map((e) => {
     const l = lineFor(e.end);
@@ -189,7 +193,7 @@ function GraphCard({ results, mode, varKey, onChange }: { results?: EndAnalysis[
   const closeMenu = () => setMenu(null);
   const run = (fn: () => void) => () => { fn(); closeMenu(); };
   const title = `${y.label} against ${def.x.label.toLowerCase()}`;
-  const edit = (end: End) => lab().setEditLine({ end, sweep: mode, variable: y.key, label: `${END_NAME[end]} ${title}` });
+  const edit = (end: End) => lab().setEditLine({ end, sweep: mode, variable: y.key, label: `${END_NAME[end]} ${title}`, xUnit: def.x.unit, yUnit: y.unit });
   const copyData = () => ends.forEach((e) => lab().setUserLine(lineFromData(e[mode] as any[], mode, y.key, e.end)));
   const store = (slot: number) => results && lab().storeScope(slot, results);
 
@@ -211,13 +215,13 @@ function GraphCard({ results, mode, varKey, onChange }: { results?: EndAnalysis[
           {devs.map((d) => (
             <span key={d.end}>
               {ends.length > 1 ? `${END_NAME[d.end]}: ` : ''}
-              user deviation <b>{fixed(d.user)}</b> · scope {devSlot + 1} deviation <b>{fixed(d.scope)}</b>
+              user deviation <b>{fixed(d.user, fy)}</b> · scope {devSlot + 1} deviation <b>{fixed(d.scope, fy)}</b>
             </span>
           ))}
         </div>
       )}
       {data ? (
-        <Plot data={data} series={series} xLabel={`${def.x.label} (${def.x.unit})`} yLabel={y.unit || 'ratio'} marker={current} />
+        <Plot data={data} series={series} xLabel={`${def.x.label} (${unitText(def.x.unit, units)})`} yLabel={unitText(y.unit, units) || 'ratio'} marker={current} />
       ) : (
         <div className="muted pad">{results ? 'Not applicable to this model.' : 'Calculating…'}</div>
       )}

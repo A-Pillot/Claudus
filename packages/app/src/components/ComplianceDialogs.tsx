@@ -5,6 +5,7 @@ import {
 } from '@claudus/core';
 import { useApp } from '../store';
 import { NumberCell } from './PointTable';
+import { fmtUnit, labelUnit, unitText, useUnitSettings } from '../units';
 
 /** A text input that commits on Enter or blur. */
 export function TextCell({ value, onCommit, className }: { value: string; onCommit: (v: string) => void; className?: string }) {
@@ -46,7 +47,7 @@ export function useEndInfo() {
   return { end, template, data: endCompliance(compliance, end), compliance };
 }
 
-export const fmt = (v: number, d = 3) => (Number.isFinite(v) ? v.toFixed(d) : '–');
+export const fmt = (v: number, d = 3, unit?: string) => (unit ? fmtUnit(unit, v, d) : Number.isFinite(v) ? v.toFixed(d) : '–');
 
 export function ComplianceDialogs({ corner, state, detail }: { corner?: Corner; state?: AxleState; detail?: ComplianceResult }) {
   const dialog = useApp((s) => s.dialog);
@@ -94,7 +95,7 @@ export function AxisEditor({ label, value, onChange, fallback }: { label: string
         </select>
       )}
       {(value.kind === 'rel' || value.kind === 'abs') && [0, 1, 2].map((k) => (
-        <NumberCell key={k} value={value.v[k]} onCommit={(x) => onChange({ kind: value.kind, v: value.v.map((q, j) => (j === k ? x : q)) as Vec3 } as AxisRef)} />
+        <NumberCell key={k} unit="mm" value={value.v[k]} onCommit={(x) => onChange({ kind: value.kind, v: value.v.map((q, j) => (j === k ? x : q)) as Vec3 } as AxisRef)} />
       ))}
     </div>
   );
@@ -103,6 +104,7 @@ export function AxisEditor({ label, value, onChange, fallback }: { label: string
 const STIFF_HEAD = ['kx', 'ky', 'kz', 'krx', 'kry', 'krz'];
 
 function BushDialog({ onClose }: { onClose: () => void }) {
+  useUnitSettings();
   const { end, template, data, compliance } = useEndInfo();
   const edit = useApp((s) => s.editEndCompliance);
   const lossDefault = compliance?.settings.lossAngle ?? defaultSettings().lossAngle;
@@ -118,7 +120,7 @@ function BushDialog({ onClose }: { onClose: () => void }) {
   const jp = joints.find((p) => p.no === sel);
   return (
     <Dlg title={`Bush properties (${end})`} onClose={onClose} wide>
-      <p className="muted small">Joints are rigid ball joints until made a bush. Translational stiffness in N/mm, rotational in N.m/rad, in the bush's own axes.</p>
+      <p className="muted small">Joints are rigid ball joints until made a bush. Translational stiffness in {unitText('N/mm')}, rotational in {unitText('N·m/rad')}, in the bush's own axes.</p>
       <div className="tblwrap">
         <table className="ctable">
           <thead><tr><th>No</th><th>Joint</th><th>Bush</th>{STIFF_HEAD.map((h) => <th key={h}>{h}</th>)}<th>Z axis</th></tr></thead>
@@ -131,7 +133,7 @@ function BushDialog({ onClose }: { onClose: () => void }) {
                   <td className="label" title={p.label}>{p.label}</td>
                   <td><input type="checkbox" aria-label={`Bush at point ${p.no}`} checked={!!bu} onChange={(e) => toggle(p.no, e.target.checked)} /></td>
                   {STIFF_HEAD.map((_, k) => (
-                    <td key={k}>{bu ? <NumberCell value={bu.stiffness[k]} onCommit={(v) => setBush(p.no, (x) => { x.stiffness[k] = v; })} /> : <span className="muted">rigid</span>}</td>
+                    <td key={k}>{bu ? <NumberCell unit={k < 3 ? 'N/mm' : 'N·m/rad'} value={bu.stiffness[k]} onCommit={(v) => setBush(p.no, (x) => { x.stiffness[k] = v; })} /> : <span className="muted">rigid</span>}</td>
                   ))}
                   <td className="muted">{bu ? KIND_LABEL[bu.zAxis.kind] : ''}</td>
                 </tr>
@@ -146,9 +148,9 @@ function BushDialog({ onClose }: { onClose: () => void }) {
           <AxisEditor label="Local z axis" value={b.zAxis} fallback={[0, 0, 100]} onChange={(r) => setBush(b.point, (x) => { x.zAxis = r; })} />
           <AxisEditor label="Point in x-z plane" value={b.xzPlane} fallback={[100, 0, 0]} onChange={(r) => setBush(b.point, (x) => { x.xzPlane = r; })} />
           <div className="row">
-            <label className="vlabel">Loss angle (deg)</label>
-            <NumberCell value={b.lossAngle ?? lossDefault} onCommit={(v) => setBush(b.point, (x) => { x.lossAngle = v; })} />
-            <span className="muted small">default {lossDefault}</span>
+            <label className="vlabel">Loss angle ({unitText('deg')})</label>
+            <NumberCell unit="deg" value={b.lossAngle ?? lossDefault} onCommit={(v) => setBush(b.point, (x) => { x.lossAngle = v; })} />
+            <span className="muted small">default {fmtUnit('deg', lossDefault, 3).replace(/\.?0+$/, '')}</span>
           </div>
         </div>
       )}
@@ -162,6 +164,7 @@ const toStiff = (t: number) => (t <= 0 ? 0 : Math.round(10 ** ((t - 1) / 100) * 
 const fromStiff = (v: number) => (v <= 0 ? 0 : Math.min(600, Math.max(1, Math.round(Math.log10(v) * 100) + 1)));
 
 function SliderDialog({ onClose, state }: { onClose: () => void; state?: AxleState }) {
+  useUnitSettings();
   const { end, template, data } = useEndInfo();
   const bushPoint = useApp((s) => s.bushPoint);
   const setBushPoint = useApp((s) => s.setBushPoint);
@@ -179,12 +182,12 @@ function SliderDialog({ onClose, state }: { onClose: () => void; state?: AxleSta
           </select>
           {STIFF_HEAD.map((h, k) => (
             <div className="row" key={h}>
-              <label className="vlabel short">{h} ({k < 3 ? 'N/mm' : 'N.m/rad'})</label>
+              <label className="vlabel short">{h} ({unitText(k < 3 ? 'N/mm' : 'N·m/rad')})</label>
               <input type="range" aria-label={h} min={0} max={600} value={fromStiff(bush.stiffness[k])} onChange={(e) => set(k, toStiff(Number(e.target.value)))} />
-              <NumberCell value={bush.stiffness[k]} onCommit={(v) => set(k, Math.max(0, v))} />
+              <NumberCell unit={k < 3 ? 'N/mm' : 'N·m/rad'} value={bush.stiffness[k]} onCommit={(v) => set(k, Math.max(0, v))} />
             </div>
           ))}
-          {g && <div className="live-line" data-testid="slider-live">Toe {fmt(g.toeSae)}°  Camber {fmt(g.camber)}°  Castor {fmt(g.castor)}°</div>}
+          {g && <div className="live-line" data-testid="slider-live">Toe {fmt(g.toeSae, 3, 'deg')}{unitText('°')}  Camber {fmt(g.camber, 3, 'deg')}{unitText('°')}  Castor {fmt(g.castor, 3, 'deg')}{unitText('°')}</div>}
         </>
       ) : (
         <p className="muted">This end has no bushes yet. Make a joint compliant in Bush properties first.</p>
@@ -198,12 +201,13 @@ function SliderDialog({ onClose, state }: { onClose: () => void; state?: AxleSta
 function ValuesDialog({ title, onClose, fields, note }: { title: string; onClose: () => void; note?: string; fields: (e: EndCompliance) => [string, number, (e: EndCompliance, v: number) => void][] }) {
   const { end, data } = useEndInfo();
   const edit = useApp((s) => s.editEndCompliance);
+  useUnitSettings();
   return (
     <Dlg title={`${title} (${end})`} onClose={onClose}>
       {fields(data).map(([label, value, apply]) => (
         <div className="row" key={label}>
-          <label className="vlabel wide">{label}</label>
-          <NumberCell value={value} onCommit={(v) => edit((e) => apply(e, v))} />
+          <label className="vlabel wide">{labelUnit(label).label}</label>
+          <NumberCell unit={labelUnit(label).unit} value={value} onCommit={(v) => edit((e) => apply(e, v))} />
         </div>
       ))}
       {note && <p className="muted small">{note}</p>}
@@ -212,6 +216,7 @@ function ValuesDialog({ title, onClose, fields, note }: { title: string; onClose
 }
 
 function SpringDialog({ onClose }: { onClose: () => void }) {
+  useUnitSettings();
   const { end, template, data } = useEndInfo();
   const edit = useApp((s) => s.editEndCompliance);
   const has = [template && findGen(template, GenType.Spring1ToSuspension), template && findGen(template, GenType.Spring2ToSuspension)];
@@ -222,8 +227,8 @@ function SpringDialog({ onClose }: { onClose: () => void }) {
           <legend>Spring {k + 1}{has[k] ? '' : ' (not in this template)'}</legend>
           {([['Rate (N/mm)', 'rate'], ['Free length (mm)', 'freeLength'], ['Fitted length (mm)', 'fittedLength']] as const).map(([label, key]) => (
             <div className="row" key={key}>
-              <label className="vlabel">{label}</label>
-              <NumberCell value={data.springs[k][key]} onCommit={(v) => edit((e) => { e.springs[k][key] = v; })} />
+              <label className="vlabel">{labelUnit(label).label}</label>
+              <NumberCell unit={labelUnit(label).unit} value={data.springs[k][key]} onCommit={(v) => edit((e) => { e.springs[k][key] = v; })} />
             </div>
           ))}
         </fieldset>
@@ -233,6 +238,7 @@ function SpringDialog({ onClose }: { onClose: () => void }) {
 }
 
 function GeneralDialog({ onClose }: { onClose: () => void }) {
+  useUnitSettings();
   const settings = useApp((s) => s.model.compliance?.settings) ?? defaultSettings();
   const edit = useApp((s) => s.editCompliance);
   const num: [string, 'singularity' | 'rigid' | 'rigidRotation' | 'lossAngle'][] = [
@@ -243,8 +249,8 @@ function GeneralDialog({ onClose }: { onClose: () => void }) {
     <Dlg title="General compliance data" onClose={onClose}>
       {num.map(([label, key]) => (
         <div className="row" key={key}>
-          <label className="vlabel wide">{label}</label>
-          <NumberCell value={settings[key]} onCommit={(v) => edit((c) => { c.settings[key] = v; })} />
+          <label className="vlabel wide">{labelUnit(label).label}</label>
+          <NumberCell unit={labelUnit(label).unit} value={settings[key]} onCommit={(v) => edit((c) => { c.settings[key] = v; })} />
         </div>
       ))}
       <label className="check"><input type="checkbox" checked={settings.includeSpring} onChange={(e) => edit((c) => { c.settings.includeSpring = e.target.checked; })} /> Include spring force</label>
@@ -255,6 +261,7 @@ function GeneralDialog({ onClose }: { onClose: () => void }) {
 /* ---------- external forces ---------- */
 
 function ForcesDialog({ onClose }: { onClose: () => void }) {
+  useUnitSettings();
   const stored = useApp((s) => s.model.compliance);
   const edit = useApp((s) => s.editCompliance);
   const model = useApp((s) => s.model);
@@ -290,7 +297,7 @@ function ForcesDialog({ onClose }: { onClose: () => void }) {
           <b>Forces in set {si}{set ? `: ${set.label}` : ''}</b>
           <div className="tblwrap">
             <table className="ctable">
-              <thead><tr><th>On</th><th>Label</th><th>End</th><th>Part</th><th>At pt</th><th colSpan={3}>Head (x y z)</th><th colSpan={3}>Tail (x y z)</th><th>Force N</th></tr></thead>
+              <thead><tr><th>On</th><th>Label</th><th>End</th><th>Part</th><th>At pt</th><th colSpan={3}>Head (x y z, {unitText('mm')})</th><th colSpan={3}>Tail (x y z, {unitText('mm')})</th><th>Force {unitText('N')}</th></tr></thead>
               <tbody>
                 {set?.forces.map((f, i) => (
                   <tr key={i} className={i === fi ? 'sel' : ''} onClick={() => setFi(i)}>
@@ -304,9 +311,9 @@ function ForcesDialog({ onClose }: { onClose: () => void }) {
                     <td title={`0 = wheel part, 1..${partsOf(f.end)}`}><NumberCell value={f.part} digits={0} onCommit={(v) => edit((c) => { c.forceSets[si].forces[i].part = Math.max(0, Math.round(v)); })} /></td>
                     <td title="0 = tyre contact point"><NumberCell value={f.at} digits={0} onCommit={(v) => edit((c) => { c.forceSets[si].forces[i].at = Math.max(0, Math.round(v)); })} /></td>
                     {(['head', 'tail'] as const).flatMap((key) => [0, 1, 2].map((k) => (
-                      <td key={key + k}><NumberCell value={f[key][k]} onCommit={(v) => edit((c) => { c.forceSets[si].forces[i][key][k] = v; })} /></td>
+                      <td key={key + k}><NumberCell unit="mm" value={f[key][k]} onCommit={(v) => edit((c) => { c.forceSets[si].forces[i][key][k] = v; })} /></td>
                     )))}
-                    <td><NumberCell value={f.magnitude} onCommit={(v) => edit((c) => { c.forceSets[si].forces[i].magnitude = v; })} /></td>
+                    <td><NumberCell unit="N" value={f.magnitude} onCommit={(v) => edit((c) => { c.forceSets[si].forces[i].magnitude = v; })} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -328,6 +335,7 @@ function ForcesDialog({ onClose }: { onClose: () => void }) {
 const SHORT = ['Toe', 'Camber', 'Castor', 'KPI', 'WC X', 'WC Y', 'WC Z', 'TCP X', 'TCP Y'];
 
 function CoefficientsDialog({ onClose }: { onClose: () => void }) {
+  useUnitSettings();
   const end = useApp((s) => s.end);
   const data = useApp((s) => s.model[s.end]);
   const compliance = useApp((s) => s.model.compliance);
@@ -395,10 +403,10 @@ function CoefficientsDialog({ onClose }: { onClose: () => void }) {
                 const x = 8 + k * 36;
                 return (
                   <g key={c.key}>
-                    <title>{`${c.label}: ${v.toFixed(4)} ${c.unit}`}</title>
+                    <title>{`${c.label}: ${fmt(v, 4, c.unit)} ${unitText(c.unit)}`}</title>
                     <rect x={x} width={bw} y={h >= 0 ? mid - h : mid} height={Math.abs(h)} fill={v >= 0 ? 'var(--accent)' : '#f28e2b'} opacity={s.on ? 1 : 0.35} />
                     <text x={x + bw / 2} y={H - 22} textAnchor="middle" fontSize="9" fill="var(--muted)">{SHORT[k]}</text>
-                    <text x={x + bw / 2} y={H - 8} textAnchor="middle" fontSize="9" fill="var(--text)">{Math.abs(v) < 0.0005 ? '0' : v.toFixed(Math.abs(v) >= 10 ? 1 : 3)}</text>
+                    <text x={x + bw / 2} y={H - 8} textAnchor="middle" fontSize="9" fill="var(--text)">{Math.abs(v) < 0.0005 ? '0' : fmt(v, Math.abs(v) >= 10 ? 1 : 3, c.unit)}</text>
                   </g>
                 );
               })}
@@ -422,6 +430,7 @@ function CoefficientsDialog({ onClose }: { onClose: () => void }) {
 /* ---------- result tables ---------- */
 
 function JointsDialog({ onClose, corner, detail }: { onClose: () => void; corner?: Corner; detail?: ComplianceResult }) {
+  useUnitSettings();
   const [frame, setFrame] = useState<'global' | 'local'>('global');
   const compliant = useApp((s) => s.compliant);
   const label = (no: number) => corner?.template.points.find((p) => p.no === no)?.label ?? '';
@@ -433,7 +442,7 @@ function JointsDialog({ onClose, corner, detail }: { onClose: () => void; corner
             <button className={frame === 'global' ? 'on' : ''} onClick={() => setFrame('global')}>Global axes</button>
             <button className={frame === 'local' ? 'on' : ''} onClick={() => setFrame('local')}>Bush local axes</button>
           </div>
-          <p className="muted small">Right-hand corner at the current position. Deflection of part 1 relative to part 2 (mm); force carried by the joint (N).</p>
+          <p className="muted small">Right-hand corner at the current position. Deflection of part 1 relative to part 2 ({unitText('mm')}); force carried by the joint ({unitText('N')}).</p>
           <div className="tblwrap">
             <table className="ctable results">
               <thead><tr><th>No</th><th>Joint</th><th>Type</th><th>Defl X</th><th>Defl Y</th><th>Defl Z</th><th>Force X</th><th>Force Y</th><th>Force Z</th></tr></thead>
@@ -446,8 +455,8 @@ function JointsDialog({ onClose, corner, detail }: { onClose: () => void; corner
                       <td className="no">{j.point}</td>
                       <td className="label">{label(j.point)}</td>
                       <td>{j.bushed ? 'Bush' : 'Rigid'}</td>
-                      {d.map((v, k) => <td key={'d' + k} className="num">{fmt(v, 4)}</td>)}
-                      {f.map((v, k) => <td key={'f' + k} className="num">{fmt(v, 1)}</td>)}
+                      {d.map((v, k) => <td key={'d' + k} className="num">{fmt(v, 4, 'mm')}</td>)}
+                      {f.map((v, k) => <td key={'f' + k} className="num">{fmt(v, 1, 'N')}</td>)}
                     </tr>
                   );
                 })}
@@ -461,15 +470,16 @@ function JointsDialog({ onClose, corner, detail }: { onClose: () => void; corner
 }
 
 function LoadsDialog({ onClose, corner, detail }: { onClose: () => void; corner?: Corner; detail?: ComplianceResult }) {
+  useUnitSettings();
   const compliant = useApp((s) => s.compliant);
   return (
     <Dlg title="Spring and tyre loads" onClose={onClose}>
       {!compliant || !detail ? <p className="muted">Switch on the compliant solver to see loads.</p> : (
         <table className="ctable results">
-          <thead><tr><th>Item</th><th>Load (N)</th></tr></thead>
+          <thead><tr><th>Item</th><th>Load ({unitText('N')})</th></tr></thead>
           <tbody>
-            {detail.springForces.map((f, k) => Number.isFinite(f) && <tr key={'s' + k}><td>Spring {k + 1} (+ compression)</td><td className="num">{fmt(f, 1)}</td></tr>)}
-            {detail.tyreLoads.map((f, k) => <tr key={'t' + k}><td>Tyre vertical load{corner && corner.sides.length > 1 ? (k === 0 ? ' (right)' : ' (left)') : ''}</td><td className="num">{fmt(f, 1)}</td></tr>)}
+            {detail.springForces.map((f, k) => Number.isFinite(f) && <tr key={'s' + k}><td>Spring {k + 1} (+ compression)</td><td className="num">{fmt(f, 1, 'N')}</td></tr>)}
+            {detail.tyreLoads.map((f, k) => <tr key={'t' + k}><td>Tyre vertical load{corner && corner.sides.length > 1 ? (k === 0 ? ' (right)' : ' (left)') : ''}</td><td className="num">{fmt(f, 1, 'N')}</td></tr>)}
           </tbody>
         </table>
       )}

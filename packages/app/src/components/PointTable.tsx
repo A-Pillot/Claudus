@@ -1,18 +1,26 @@
 import { useEffect, useRef, useState } from 'react';
-import { dataPoints, getTemplate, GROUND, hasTemplate } from '@claudus/core';
+import { dataPoints, fromDisplayUnit, getTemplate, GROUND, hasTemplate, toDisplayUnit, unitDecimalsFor } from '@claudus/core';
 import { useApp } from '../store';
 import { pickPoint } from '../graphicsActions';
+import { unitText, useUnitSettings } from '../units';
 
-/** A number input that only commits on Enter or blur, so half-typed values never reach the solver. */
-export function NumberCell({ value, onCommit, digits = 3 }: { value: number; onCommit: (v: number) => void; digits?: number }) {
-  const shown = Number.isFinite(value) ? String(Number(value.toFixed(digits))) : '';
+/**
+ * A number input that only commits on Enter or blur, so half-typed values never reach the solver. With `unit` (a
+ * default-unit string such as 'mm' or 'N/mm') the value is shown and typed in the display units and committed back
+ * in the default units.
+ */
+export function NumberCell({ value, onCommit, digits = 3, unit }: { value: number; onCommit: (v: number) => void; digits?: number; unit?: string }) {
+  useUnitSettings();
+  const d = unit ? unitDecimalsFor(unit, digits) : digits;
+  const shown = Number.isFinite(value) ? String(Number((unit ? toDisplayUnit(unit, value) : value).toFixed(d))) : '';
   const [text, setText] = useState(shown);
   const [editing, setEditing] = useState(false);
   useEffect(() => { if (!editing) setText(shown); }, [shown, editing]);
   const commit = () => {
     setEditing(false);
-    const v = Number(text);
-    if (text.trim() !== '' && Number.isFinite(v) && v !== value) onCommit(v);
+    const typed = Number(text);
+    const v = unit ? fromDisplayUnit(unit, typed) : typed;
+    if (text.trim() !== '' && text !== shown && Number.isFinite(v) && v !== value) onCommit(v);
     else setText(shown);
   };
   return (
@@ -38,6 +46,7 @@ export function PointTable() {
   const select = useApp((s) => s.select);
   const setPoint = useApp((s) => s.setPoint);
   const setRollingRadius = useApp((s) => s.setRollingRadius);
+  useUnitSettings();
   const rowRefs = useRef<(HTMLTableRowElement | null)[]>([]);
 
   useEffect(() => {
@@ -51,7 +60,7 @@ export function PointTable() {
   return (
     <div className="points">
       <div className="tplname">
-        Type {t.slot}: {t.label}
+        Type {t.slot}: {t.label} <span className="muted">({unitText('mm')})</span>
       </div>
       <table>
         <thead>
@@ -71,14 +80,14 @@ export function PointTable() {
                 {(tp.part1 === GROUND || tp.part2 === GROUND) && <span className="tag">body</span>}
               </td>
               {[0, 1, 2].map((k) => (
-                <td key={k}><NumberCell value={data.points[i][k]} onCommit={(v) => setPoint(i, k, v)} /></td>
+                <td key={k}><NumberCell unit="mm" value={data.points[i][k]} onCommit={(v) => setPoint(i, k, v)} /></td>
               ))}
             </tr>
           ))}
           <tr>
             <td />
             <td className="label">Tyre rolling radius</td>
-            <td><NumberCell value={data.rollingRadius} onCommit={setRollingRadius} /></td>
+            <td><NumberCell unit="mm" value={data.rollingRadius} onCommit={setRollingRadius} /></td>
             <td colSpan={2} />
           </tr>
         </tbody>

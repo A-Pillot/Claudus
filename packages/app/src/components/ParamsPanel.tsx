@@ -1,6 +1,7 @@
 import type { VehicleParams } from '@claudus/core';
 import { useApp } from '../store';
 import { NumberCell } from './PointTable';
+import { unitText, useUnitSettings } from '../units';
 
 const fields: { key: keyof VehicleParams; label: string; unit: string }[] = [
   { key: 'bumpTravel', label: 'Bump travel', unit: 'mm' },
@@ -27,6 +28,7 @@ const choices: { key: keyof VehicleParams; label: string; options: [number, stri
 export function ParamsPanel() {
   const p = useApp((s) => s.model.params);
   const setParam = useApp((s) => s.setParam);
+  useUnitSettings();
   return (
     <div className="params">
       <table>
@@ -34,8 +36,8 @@ export function ParamsPanel() {
           {fields.map((f) => (
             <tr key={f.key}>
               <td>{f.label}</td>
-              <td><NumberCell value={p[f.key] as number} onCommit={(v) => setParam(f.key, v as never)} /></td>
-              <td className="unit">{f.unit}</td>
+              <td><NumberCell unit={f.unit} value={p[f.key] as number} onCommit={(v) => setParam(f.key, v as never)} /></td>
+              <td className="unit">{unitText(f.unit)}</td>
             </tr>
           ))}
           {choices.map((c) => (

@@ -30,3 +30,5 @@ export * from './model/rideHeight.js';
 export * from './optimise/index.js';
 export * from './math/eigen.js';
 export * from './compliance/modal.js';
+export * from './units.js';
+export * from './io/avi.js';
