@@ -120,7 +120,8 @@ export function listPointAtAllPositions(m: Model, end: End, pointNo: number, mot
     const mirrored = !c.fullAxle;
     const left = mirrored && motion !== 'bump' ? solveStates(c, motion, values.map((v) => -v).sort((a, b) => a - b)) : undefined;
     L.push('', `  ${MOTION_LABEL[motion]}`, '');
-    const rows = values.flatMap((v) => {
+    const solved = values.filter((v) => right.has(v) && (!mirrored || (left ? left.has(-v) : true)));
+    const rows = solved.flatMap((v) => {
       const rs: { v: number; row: PointPosition }[] = [];
       const one = (st: CornerState, side: PointPosition['side'], mirror: boolean) => {
         const mf = (p: Vec3) => (mirror ? mirrorY(p) : p);
@@ -196,7 +197,7 @@ export function jointSeries(m: Model, end: End, motion: Motion, comp: Compliance
   const staticPts = c.solve({}).points;
   const values = motionValues(m.params, motion);
   const states = solveStates(c, motion, values);
-  return values.map((x) => {
+  return values.filter((x) => states.has(x)).map((x) => {
     const st = states.get(x)!;
     return { x, joints: complianceAt(c, st, comp).joints, rotations: jointRotations(c, comp, staticPts, st) };
   });
@@ -276,12 +277,13 @@ export function ballJointSeries(m: Model, end: End, comp: ComplianceData, o: Bal
       return deg(Math.acos(Math.max(-1, Math.min(1, dot(a, b) / (norm(a) * norm(b))))));
     };
     const a0 = angle(c.solve({}));
-    return { x: values, series: [{ label: 'Angle between axes change', y: values.map((v) => angle(states.get(v)!) - a0) }] };
+    const solved = values.filter((v) => states.has(v));
+    return { x: solved, series: [{ label: 'Angle between axes change', y: solved.map((v) => angle(states.get(v)!) - a0) }] };
   }
   const inc = jointSeries(m, end, o.motion, comp);
   const pick = (i: JointIncrement) => i.rotations.find((r) => r.point === o.point);
   return {
-    x: values,
+    x: inc.map((i) => i.x),
     series: ['X', 'Y', 'Z'].map((a, k) => ({ label: `${a} rotation`, y: inc.map((i) => (pick(i)?.[o.frame === 'local' ? 'local' : 'global'] ?? [NaN, NaN, NaN])[k]) })),
   };
 }
