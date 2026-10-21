@@ -11,6 +11,7 @@ import type { End, SuspensionData } from '../model/types.js';
 import { getTemplate } from '../template/registry.js';
 import { GenType, findGen, type Template } from '../template/types.js';
 import { Mechanism, tyreContactPoint, wheelLowestZ, type Drive } from './mechanism.js';
+import { defaultSolverOptions, type SolverOptions } from './options.js';
 
 export interface Articulation {
   /** Wheel bump (+) / rebound (-) relative to the body, mm. */
@@ -28,6 +29,11 @@ export interface CornerState {
   x: number[];
   drive: Drive;
   converged: boolean;
+  /**
+   * How far the body frame sits below where it started: 0 normally, minus the bump when the solution
+   * moves the body instead of the ground. `points` and `groundZ` are already in the shifted frame.
+   */
+  dz: number;
 }
 
 /** Rates of change per mm of ground (wheel) travel, at fixed body and rack. */
@@ -61,8 +67,11 @@ export class Corner {
   /** Static roll centre height used as the body roll axis, mm (absolute z). */
   rollAxisZ: number;
   private readonly idx: (gen: GenType) => number | undefined;
+  /** Solver settings (tolerances, moving ground or body, roll solution type). */
+  options: SolverOptions;
 
-  constructor(data: SuspensionData, end: End, template: Template = getTemplate(data.templateSlot)) {
+  constructor(data: SuspensionData, end: End, template: Template = getTemplate(data.templateSlot), options: SolverOptions = defaultSolverOptions()) {
+    this.options = options;
     this.template = template;
     this.end = end;
     this.mech = new Mechanism(template, data.points, data.rollingRadius);
@@ -97,9 +106,9 @@ export class Corner {
 
   /** Kinematic solve for a drive, followed by the deformation when one is set. */
   solveDrive(drive: Drive, warm?: number[]): { points: Vec3[]; x: number[]; converged: boolean } {
-    const res = this.mech.solve(drive, warm);
+    const res = this.mech.solve(drive, warm, this.options.kinTol);
     if (!this.deform) return res;
-    const st: CornerState = { articulation: { bump: 0, roll: 0, rack: drive.rack ?? 0 }, points: res.points, groundZ: drive.groundZ, x: res.x, drive, converged: res.converged };
+    const st: CornerState = { articulation: { bump: 0, roll: 0, rack: drive.rack ?? 0 }, points: res.points, groundZ: drive.groundZ, x: res.x, drive, converged: res.converged, dz: 0 };
     return { ...res, points: this.deform(st) };
   }
 
@@ -125,9 +134,47 @@ export class Corner {
 
   solve(a: Articulation, warm?: number[]): CornerState {
     const art = { bump: a.bump ?? 0, roll: a.roll ?? 0, rack: a.rack ?? 0 };
-    const drive = this.driveFor(art);
+    if (art.roll !== 0 && this.options.rollOld) return this.solveOldRoll(art, warm);
+    return this.finish(art, this.driveFor(art), warm);
+  }
+
+  private finish(art: Required<Articulation>, drive: Drive, warm?: number[]): CornerState {
     const res = this.solveDrive(drive, warm);
-    return { articulation: art, points: res.points, groundZ: drive.groundZ, x: res.x, drive, converged: res.converged };
+    // Moving body: solved with the ground raised (same relative geometry), then shown with the ground
+    // fixed and the body lowered by the bump.
+    const dz = this.options.motion === 'body' ? -art.bump : 0;
+    const points = dz ? res.points.map((p): Vec3 => [p[0], p[1], p[2] + dz]) : res.points;
+    return { articulation: art, points, groundZ: drive.groundZ + dz, x: res.x, drive, converged: res.converged, dz };
+  }
+
+  /**
+   * Old roll solution: the body is rolled in small steps, each about the roll centre height found at the
+   * previous step, instead of always about the static roll centre. Large rolls jack the body as a result.
+   */
+  private solveOldRoll(art: Required<Articulation>, warm?: number[]): CornerState {
+    const n = Math.max(1, Math.ceil(Math.abs(art.roll) / 0.25));
+    const steps: { dphi: number; z: number }[] = [];
+    const bodyOf = () => (p: Vec3): Vec3 => steps.reduce((q, s) => rotateAbout(q, [0, 0, s.z], [1, 0, 0], s.dphi), p);
+    let z = this.rollAxisZ;
+    let st: CornerState | undefined;
+    let x = warm;
+    for (let k = 1; k <= n; k++) {
+      steps.push({ dphi: rad(-art.roll) / n, z });
+      const drive: Drive = { ...this.driveFor({ ...art, roll: 0 }), body: bodyOf(), rack: art.rack };
+      st = this.finish({ ...art, roll: (art.roll * k) / n }, drive, x);
+      x = st.x;
+      if (k < n) {
+        // Roll centre height at this step, taken with the ground fixed (a symmetric bump estimate).
+        const zc = this.fullAxle ? this.rollCentreAxle(st)[1] : this.rollCentreBump(st, this.rates(st));
+        if (Number.isFinite(zc)) z = zc - st.dz;
+      }
+    }
+    return { ...st!, articulation: art };
+  }
+
+  /** Ground height under the second wheel of a full axle, in the same frame as `st.points`. */
+  groundZ2Of(st: CornerState): number {
+    return st.drive.groundZ2 !== undefined ? st.drive.groundZ2 + st.dz : st.groundZ;
   }
 
   /** Tyre contact point of a wheel, in model coordinates. */
@@ -155,10 +202,11 @@ export class Corner {
    * the second wheel's ground moves on a full axle: +1 for parallel bump (heave), -1 for opposed (roll).
    * Returns one entry per wheel, in model coordinates.
    */
-  wheelRates(st: CornerState, sign: 1 | -1 = 1, h = 0.05): CornerRates[] {
+  wheelRates(st: CornerState, sign: 1 | -1 = 1, h = this.options.bumpPerturb): CornerRates[] {
     const g2 = st.drive.groundZ2 ?? st.groundZ;
-    const up = this.solveDrive({ ...st.drive, groundZ: st.groundZ + h, groundZ2: g2 + sign * h }, st.x);
-    const dn = this.solveDrive({ ...st.drive, groundZ: st.groundZ - h, groundZ2: g2 - sign * h }, st.x);
+    const g1 = st.drive.groundZ;
+    const up = this.solveDrive({ ...st.drive, groundZ: g1 + h, groundZ2: g2 + sign * h }, st.x);
+    const dn = this.solveDrive({ ...st.drive, groundZ: g1 - h, groundZ2: g2 - sign * h }, st.x);
     return this.sides.map((_, k) => {
       // per mm of this wheel's own travel
       const s = (k === 0 ? 1 : sign) / (2 * h);
@@ -178,7 +226,7 @@ export class Corner {
   }
 
   /** Rates of the right wheel for parallel bump (both wheels of a full axle move together). */
-  rates(st: CornerState, h = 0.05): CornerRates {
+  rates(st: CornerState, h = this.options.bumpPerturb): CornerRates {
     return this.wheelRates(st, 1, h)[0];
   }
 
@@ -187,7 +235,7 @@ export class Corner {
    * paths meet for opposed wheel travel. For a rigid axle this is the centre the axle rolls about relative to
    * the body; for independent wheels it is the usual swing-arm construction.
    */
-  rollCentreAxle(st: CornerState, h = 0.05): [number, number] {
+  rollCentreAxle(st: CornerState, h = this.options.bumpPerturb): [number, number] {
     const [r, l] = this.wheelRates(st, -1, h);
     const tr = this.tcp(st.points, 0);
     const tl = this.tcp(st.points, 1);
@@ -206,14 +254,14 @@ export class Corner {
    * steerable template, the instantaneous screw axis of the upright under a small rack movement (SHARK's
    * "steer small perturbation" method for virtual kingpins).
    */
-  steeringAxisAt(st: CornerState, h = 0.05, wheel = 0): [Vec3, Vec3] | undefined {
+  steeringAxisAt(st: CornerState, h = this.options.steerPerturb, wheel = 0): [Vec3, Vec3] | undefined {
     const fixed = this.steeringAxis(st.points, wheel);
     if (fixed || this.mech.rackPoint === undefined) return fixed;
     return this.screwAxis(st, h, wheel);
   }
 
   /** Instantaneous screw axis of the upright for a small rack movement, as (lower point, upper point). */
-  screwAxis(st: CornerState, h = 0.05, wheel = 0): [Vec3, Vec3] | undefined {
+  screwAxis(st: CornerState, h = this.options.steerPerturb, wheel = 0): [Vec3, Vec3] | undefined {
     if (this.mech.rackPoint === undefined) return undefined;
     const wc = this.sides[wheel].wc;
     const body = this.mech.bodies.find((b) => b.local.has(wc));

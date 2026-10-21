@@ -34,3 +34,8 @@ export * from './compliance/modal.js';
 export * from './units.js';
 export * from './io/avi.js';
 export * from './graphics/sweepPath.js';
+export * from './model/combined.js';
+export * from './model/limits.js';
+export * from './results/combined.js';
+export * from './solver/options.js';
+export * from './model/staticAngles.js';

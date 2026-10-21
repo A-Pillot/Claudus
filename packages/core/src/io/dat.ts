@@ -13,15 +13,17 @@ import {
   CLAUDUS_COMPLIANCE_SECTION, claudusComplianceLines, complianceLines, parseClaudusCompliance, parseCompliance, type PointOrder,
 } from '../compliance/io.js';
 import { defaultCompliance, type ComplianceData } from '../compliance/types.js';
+import { combinedLines, extendedBumpLines, parseCombined, parseExtendedBump } from '../model/combined.js';
+import { limitsLines, parseLimits } from '../model/limits.js';
 import { defaultParams, type Model, type PointGroup, type RawSection, type SuspensionData, type VehicleParams } from '../model/types.js';
 
 export const KNOWN_SECTIONS = [
   'VERSION', 'PARAMETERS', 'FRONT SUSPENSION', 'REAR SUSPENSION', 'TOLERANCES', 'TITLES', 'TYRE', 'BODY',
   'FORMULA', 'ROLL SOLUTION', 'GROUPS', 'COMPLIANCE', 'FORCES', 'FSETS', 'RAVEN_DEFAULTS', 'EXTENDED BUMP',
-  'COMBINED', 'USER LINES', 'USER TEMPLATES', 'CLAUDUS COMPLIANCE',
+  'COMBINED', 'USER LINES', 'USER TEMPLATES', 'CLAUDUS COMPLIANCE', 'CLAUDUS LIMITS',
 ] as const;
 
-const PARSED = new Set(['VERSION', 'PARAMETERS', 'FRONT SUSPENSION', 'REAR SUSPENSION', 'TOLERANCES', 'TITLES', 'TYRE', 'ROLL SOLUTION', 'GROUPS', 'USER TEMPLATES', 'CLAUDUS COMPLIANCE']);
+const PARSED = new Set(['VERSION', 'PARAMETERS', 'FRONT SUSPENSION', 'REAR SUSPENSION', 'TOLERANCES', 'TITLES', 'TYRE', 'ROLL SOLUTION', 'GROUPS', 'USER TEMPLATES', 'CLAUDUS COMPLIANCE', 'CLAUDUS LIMITS']);
 
 const nums = (line: string | undefined): number[] =>
   (line ?? '').trim() === '' ? [] : (line as string).trim().split(/[\s,]+/).map((s) => Number(s.replace(/[dD]/, 'E')));
@@ -115,6 +117,10 @@ export function readDat(text: string): Model {
   const front = fr && fr.lines.some((l) => l.trim()) ? parseSuspension(fr.lines) : undefined;
   const rear = re && re.lines.some((l) => l.trim()) ? parseSuspension(re.lines) : undefined;
   const compliance = readCompliance(get('COMPLIANCE')?.lines, get(CLAUDUS_COMPLIANCE_SECTION)?.lines, pointOrder({ front, rear, templates }));
+  // COMBINED and EXTENDED BUMP stay in `raw` too, so an unedited section is written back byte for byte.
+  const combined = parseCombined(get('COMBINED')?.lines);
+  const extendedBump = parseExtendedBump(get('EXTENDED BUMP')?.lines);
+  const limits = parseLimits(get('CLAUDUS LIMITS')?.lines);
   return {
     version: nums(version.lines[0]),
     versionExtra: version.lines.slice(1),
@@ -126,6 +132,9 @@ export function readDat(text: string): Model {
     tyreWidths: get('TYRE')?.lines.flatMap(nums) ?? [150, 150, 150, 150],
     rollSolution: nums(get('ROLL SOLUTION')?.lines[0])[0] ?? 1,
     groups: get('GROUPS') ? parseGroups(get('GROUPS')!.lines) : [],
+    ...(combined ? { combined } : {}),
+    ...(extendedBump ? { extendedBump } : {}),
+    ...(limits ? { limits } : {}),
     ...(templates ? { templates } : {}),
     ...(compliance ? { compliance } : {}),
     sectionOrder: sections.map((s) => s.name),
@@ -211,6 +220,9 @@ export function writeDat(m: Model): string {
   if (m.front) ensure('FRONT SUSPENSION', 'PARAMETERS');
   if (m.rear) ensure('REAR SUSPENSION', m.front ? 'FRONT SUSPENSION' : 'PARAMETERS');
   if (m.templates?.length && !order.includes('USER TEMPLATES')) order.push('USER TEMPLATES');
+  if (m.combined && !order.includes('COMBINED')) order.push('COMBINED');
+  if (m.extendedBump && !order.includes('EXTENDED BUMP')) order.push('EXTENDED BUMP');
+  if (m.limits && !order.includes('CLAUDUS LIMITS')) order.push('CLAUDUS LIMITS');
   const c = m.compliance;
   if (c && !order.includes('COMPLIANCE')) order.push('COMPLIANCE');
   if (c && !unedited(c) && !order.includes(CLAUDUS_COMPLIANCE_SECTION)) order.splice(order.indexOf('COMPLIANCE') + 1, 0, CLAUDUS_COMPLIANCE_SECTION);
@@ -267,6 +279,21 @@ export function writeDat(m: Model): string {
       case CLAUDUS_COMPLIANCE_SECTION:
         if (!c || unedited(c)) continue;
         body.push(...claudusComplianceLines(c));
+        break;
+      case 'COMBINED':
+      case 'EXTENDED BUMP': {
+        const raw = m.raw.find((r) => r.name === name);
+        const isC = name === 'COMBINED';
+        const obj = isC ? m.combined : m.extendedBump;
+        if (obj && !(raw && JSON.stringify(isC ? parseCombined(raw.lines) : parseExtendedBump(raw.lines)) === JSON.stringify(obj)))
+          body.push(...(isC ? combinedLines(m.combined!) : extendedBumpLines(m.extendedBump!)));
+        else if (raw) body.push(...raw.lines);
+        else continue;
+        break;
+      }
+      case 'CLAUDUS LIMITS':
+        if (!m.limits) continue;
+        body.push(...limitsLines(m.limits));
         break;
       case 'GROUPS':
         body.push(int(m.groups.length));

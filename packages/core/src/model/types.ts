@@ -50,6 +50,29 @@ export interface RawSection {
   lines: string[];
 }
 
+/** One step of the combined motion path: a bump (+) / rebound (-) travel with a rack position. */
+export interface CombinedStep {
+  bump: number; // mm
+  rack: number; // mm
+}
+
+/** The combined bump and steer path (SHARK's COMBINED section), used for ball joint and wheel envelope analysis. */
+export interface CombinedProfile {
+  steps: CombinedStep[];
+}
+
+/** The prescribed list of bump positions used instead of even increments (SHARK's EXTENDED BUMP section). */
+export interface ExtendedBump {
+  use: boolean;
+  steps: { bump: number; label: string }[];
+}
+
+/** Point limit box: the lowest and highest coordinate the point may take on each axis, mm. */
+export interface PointLimit {
+  min: Vec3;
+  max: Vec3;
+}
+
 export interface Model {
   /** File format version and module number from the VERSION section, plus any extra lines. */
   version: number[];
@@ -63,6 +86,10 @@ export interface Model {
   tyreWidths: number[];
   rollSolution: number;
   groups: PointGroup[];
+  combined?: CombinedProfile;
+  extendedBump?: ExtendedBump;
+  /** Point limit boxes per end, by data point index; a missing entry means the default tolerance. */
+  limits?: { front?: PointLimit[]; rear?: PointLimit[] };
   /**
    * Templates saved with the model (SHARK's Setup / Include User Templates In Data Files), so a model built
    * on an edited or custom template opens anywhere.
