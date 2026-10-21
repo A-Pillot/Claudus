@@ -25,3 +25,4 @@ export * from './io/hpMath.js';
 export * from './io/hardpoints.js';
 export * from './model/groups.js';
 export * from './model/coordSets.js';
+export * from './optimise/index.js';
