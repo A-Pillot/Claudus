@@ -233,14 +233,20 @@ function range(from: number, to: number, step: number): number[] {
   return out;
 }
 
-/** Sweep a list of articulation values, warm-starting each solve from its neighbour, starting at static. */
+/**
+ * Sweep a list of articulation values, warm-starting each solve from its neighbour, starting at static.
+ * A position whose solve fails to converge ends the sweep in that direction, so it and every position beyond
+ * it have no entry in the result: the suspension cannot reach them, and a failed state is no warm start.
+ */
 function sweep<T>(values: number[], solveAt: (v: number, warm?: number[]) => CornerState, row: (s: CornerState) => T): Map<number, T> {
   const out = new Map<number, T>();
+  if (values.length === 0) return out;
   const zeroIdx = values.reduce((best, v, i) => (Math.abs(v) < Math.abs(values[best]) ? i : best), 0);
   const run = (idxs: number[]) => {
     let warm: number[] | undefined;
     for (const i of idxs) {
       const st = solveAt(values[i], warm);
+      if (!st.converged) return;
       warm = st.x;
       out.set(values[i], row(st));
     }
@@ -284,7 +290,7 @@ export function bumpSweep(c: Corner, p: VehicleParams, values = range(-p.rebound
       springTravel: c.springLength(st.points) - s0,
     } satisfies BumpRow;
   });
-  return values.map((v) => rows.get(v)!);
+  return values.filter((v) => rows.has(v)).map((v) => rows.get(v)!);
 }
 
 export function rollSweep(c: Corner, p: VehicleParams, values = range(-p.rollAngle, p.rollAngle, p.rollIncrement)): RollRow[] {
@@ -314,11 +320,11 @@ export function rollSweep(c: Corner, p: VehicleParams, values = range(-p.rollAng
         springTravel: c.springLength(st.points) - s0,
       };
     });
-    return values.map((v) => rows.get(v)!);
+    return values.filter((v) => rows.has(v)).map((v) => rows.get(v)!);
   }
   const states = sweep(values.flatMap((v) => [v, -v]).filter((v, i, a) => a.indexOf(v) === i).sort((a, b) => a - b),
     (v, w) => c.solve({ roll: v }, w), (st) => ({ st, rs: c.wheelRates(st, 1) }));
-  return values.map((v) => {
+  return values.filter((v) => states.has(v) && states.has(-v)).map((v) => {
     const { st, rs } = states.get(v)!;
     const r = rs[0];
     const other = states.get(-v)!; // the left wheel at +v is the mirror of the right wheel at -v
@@ -369,7 +375,7 @@ export function steerSweep(c: Corner, p: VehicleParams, values = range(-p.steerT
   const g0 = geo.get(0) ?? wheelGeometry(c, c.solve({}).points, c.z0);
   const track = 2 * g0.tcp[1];
   const L = p.wheelbase;
-  return values.map((v) => {
+  return values.filter((v) => pairs.has(v) && pairs.has(-v)).map((v) => {
     const right = geo.get(v)!;
     const left = leftAt(v);
     const pr = pairs.get(v)!;
@@ -457,15 +463,17 @@ export function analyse(m: Model, opts: AnalyseOptions = {}): EndAnalysis[] {
     const corner = new Corner(data, end, undefined, solverOptionsFor(m, opts.solver, end));
     const bump = bumpSteps(m.params, m.extendedBump);
     if (opts.compliant) makeCompliant(corner, m.compliance ?? defaultCompliance());
+    const bumpRows = bumpSweep(corner, m.params, bump.values);
     out.push({
       end,
       corner,
       statics: staticValues(corner),
-      bump: bumpSweep(corner, m.params, bump.values),
+      bump: bumpRows,
       roll: rollSweep(corner, m.params),
       steer: steerSweep(corner, m.params),
       combined: m.combined && corner.mech.rackPoint !== undefined ? combinedSweep(corner, m.combined) : [],
-      bumpLabels: bump.labels,
+      // Labels follow the rows that solved.
+      bumpLabels: bump.values.flatMap((v, i) => (bumpRows.some((r) => r.bump === v) ? [bump.labels[i]] : [])),
     });
   }
   return out;

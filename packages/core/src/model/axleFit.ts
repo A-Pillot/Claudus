@@ -28,12 +28,13 @@ export function fitAddedEnd(m: Model, added: End, opts: AxleFitOptions = default
     const c = cornerOf(mm, e);
     return c.mech.staticPoints[c.mech.wheels[0].wc][0];
   };
-  const dist = wcX(out, 'front') - wcX(out, 'rear');
+  // X is positive rearward, so the rear wheel centre has the larger X.
+  const dist = wcX(out, 'rear') - wcX(out, 'front');
   if (Math.abs(dist - out.params.wheelbase) > 1e-6) {
     if (opts.wheelbase === 'parameter') out = { ...out, params: { ...out.params, wheelbase: dist } };
     else {
       // Move the added end along X so the front-to-rear distance becomes the wheelbase.
-      const dx = (added === 'rear' ? 1 : -1) * (dist - out.params.wheelbase);
+      const dx = (added === 'rear' ? 1 : -1) * (out.params.wheelbase - dist);
       const s = out[added]!;
       out = { ...out, [added]: { ...s, points: s.points.map((p): Vec3 => [p[0] + dx, p[1], p[2]]) } };
     }

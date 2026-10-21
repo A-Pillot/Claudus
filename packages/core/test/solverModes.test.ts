@@ -164,7 +164,7 @@ describe('wheelbase and ground plane differences', () => {
     const front = newModel(1, 'front');
     const rear = newModel(1, 'rear');
     // Put the rear 2000 mm behind and 5 mm higher.
-    rear.rear = { ...rear.rear!, points: rear.rear!.points.map((p) => [p[0] - 2000, p[1], p[2] + 5]) };
+    rear.rear = { ...rear.rear!, points: rear.rear!.points.map((p) => [p[0] + 2000, p[1], p[2] + 5]) };
     return { front, rear };
   };
 
@@ -175,7 +175,8 @@ describe('wheelbase and ground plane differences', () => {
     const b = addEndFromModel(front, rear, { wheelbase: 'move', ground: 'translate' }).model;
     expect(b.params.wheelbase).toBe(front.params.wheelbase);
     const wcx = (mm: Model, e: 'front' | 'rear') => { const c = new Corner(mm[e]!, e); return c.mech.staticPoints[c.mech.wheels[0].wc][0]; };
-    expect(wcx(b, 'front') - wcx(b, 'rear')).toBeCloseTo(b.params.wheelbase, 6);
+    expect(wcx(b, 'rear') - wcx(b, 'front')).toBeCloseTo(b.params.wheelbase, 6);
+    expect(wcx(b, 'rear')).toBeGreaterThan(wcx(b, 'front'));
   });
 
   it('matches the ground planes by translation or by bump', () => {
@@ -193,3 +194,17 @@ describe('wheelbase and ground plane differences', () => {
 });
 
 void steerSweep;
+
+describe('sweeps beyond the reach of the suspension', () => {
+  it('stop at the first position that does not solve instead of reporting it', () => {
+    const m = sampleModel('type1.dat');
+    const c = new Corner(m.front!, 'front');
+    const values = [-50, 0, 100, 200, 300, 400, 500, 600, 700, 800];
+    const rows = bumpSweep(c, m.params, values);
+    expect(rows.length).toBeGreaterThan(2);
+    expect(rows.length).toBeLessThan(values.length);
+    // Every row that is reported is a converged solve that reached its bump.
+    for (const r of rows) expect(c.solve({ bump: r.bump }).converged).toBe(true);
+    expect(rows.map((r) => r.bump)).toEqual(values.slice(0, rows.length));
+  });
+});
