@@ -192,6 +192,24 @@ describe('2D solver', () => {
   });
 });
 
+describe('2D to 3D conversion of other templates', () => {
+  it.each([1, 6, 14, 15, 17, 3, 4, 7])('template %i follows the 2D camber and has little bump steer', (slot) => {
+    const m = slot >= 14 || slot === 1 || slot === 6 ? dw() : strut();
+    const r2 = analyse2D(m, { ...sweep, bumpSteps: 2, reboundSteps: 2 });
+    const a = analyse(convert2DTo3D(m, { slot, end: 'front', wheelbase: 2240, castor: 0, rollingRadius: 225 }))[0];
+    let checked = 0;
+    for (const b of r2.bump) {
+      const row = a.bump.find((x) => Math.abs(x.bump - b.bump) < 1e-9);
+      if (!row) continue;
+      expect(row.camber).toBeCloseTo(b.camber, 1);
+      expect(Math.abs(row.rollCentreToGround - b.rcHeight)).toBeLessThan(5);
+      expect(Math.abs(row.toeSae)).toBeLessThan(1);
+      checked++;
+    }
+    expect(checked).toBeGreaterThanOrEqual(4);
+  });
+});
+
 describe('targets', () => {
   it('builds straight user lines from the general data', () => {
     const m = dw();
