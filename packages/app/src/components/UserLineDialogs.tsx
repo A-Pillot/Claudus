@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { UserLineSet } from '@claudus/core';
+import { lineKey, type UserLine, type UserLineSet } from '@claudus/core';
 import { useLab } from '../lab';
 import { files } from '../files';
 import { exportSets, importSets, loadSets, storeSets } from '../userLineSets';
@@ -75,6 +75,34 @@ function ManageBody() {
     setMsg(`Saved "${label}" (${current.length} lines).`);
   };
   const load = (s: UserLineSet) => { useLab.getState().setUserLines(structuredClone(s.lines)); setMsg(`Loaded "${s.label}".`); };
+  const sameKey = (a: UserLine, b: UserLine) => lineKey(a) === lineKey(b);
+  /** Add the set's lines to the current user lines, replacing any for the same variable. */
+  const include = (s: UserLineSet) => {
+    useLab.getState().setUserLines([...current.filter((c) => !s.lines.some((l) => sameKey(l, c))), ...structuredClone(s.lines)]);
+    setMsg(`Included "${s.label}" in the current user lines.`);
+  };
+  const addCurrent = (s: UserLineSet) => {
+    commit(sets.map((x) => (x.label === s.label ? { ...x, lines: [...x.lines.filter((l) => !current.some((c) => sameKey(l, c))), ...structuredClone(current)] } : x)));
+    setMsg(`Added the current lines to "${s.label}".`);
+  };
+  const removeCurrent = (s: UserLineSet) => {
+    commit(sets.map((x) => (x.label === s.label ? { ...x, lines: x.lines.filter((l) => !current.some((c) => sameKey(l, c))) } : x)));
+    setMsg(`Removed the current lines' variables from "${s.label}".`);
+  };
+  const saveFile = async (s: UserLineSet) => { await files().save(`${s.label.replace(/[^\w.-]+/g, '_')}.userlines.json`, exportSets([s])); };
+  /** Load a data set file straight into the current user lines (and keep it in the list). */
+  const loadFile = async () => {
+    const f = await files().open('.json');
+    if (!f) return;
+    try {
+      const incoming = importSets(f.text);
+      commit([...sets.filter((s) => !incoming.some((i) => i.label === s.label)), ...incoming]);
+      useLab.getState().setUserLines(incoming.flatMap((i) => structuredClone(i.lines)));
+      setMsg(`Loaded ${incoming.reduce((n, i) => n + i.lines.length, 0)} lines from ${f.name}.`);
+    } catch (e) {
+      setMsg(`Could not read ${f.name}: ${(e as Error).message}`);
+    }
+  };
   const exportJson = async () => { await files().save('user-lines.json', exportSets(sets)); };
   const importJson = async () => {
     const f = await files().open('.json');
@@ -103,7 +131,11 @@ function ManageBody() {
                 <td>{s.label}</td>
                 <td className="num">{s.lines.length}</td>
                 <td className="rowbtns">
-                  <button onClick={() => load(s)}>Load</button>
+                  <button onClick={() => load(s)} title="Replace the current user lines with this set">Load</button>
+                  <button onClick={() => include(s)} title="Add this set's lines to the current user lines">Include</button>
+                  <button onClick={() => addCurrent(s)} disabled={!current.length} title="Add the current user lines to this set">Add current</button>
+                  <button onClick={() => removeCurrent(s)} disabled={!current.length} title="Remove lines for the variables in the current user lines from this set">Remove current</button>
+                  <button onClick={() => saveFile(s)} title="Save this set as a file">Save file…</button>
                   <button onClick={() => { commit(sets.filter((x) => x.label !== s.label)); setMsg(`Deleted "${s.label}".`); }}>Delete</button>
                 </td>
               </tr>
@@ -115,6 +147,7 @@ function ManageBody() {
       <div className="row">
         <button onClick={exportJson} disabled={!sets.length}>Export JSON…</button>
         <button onClick={importJson}>Import JSON…</button>
+        <button onClick={loadFile} title="Load a data set file into the current user lines">Load file as user lines…</button>
         <span className="muted small grow">{msg}</span>
       </div>
     </Dlg>

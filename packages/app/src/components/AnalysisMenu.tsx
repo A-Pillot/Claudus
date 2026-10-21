@@ -1,3 +1,4 @@
+import { DataItems } from './DataMenu';
 import { useEffect, useRef, useState } from 'react';
 import { steeringOf, type End } from '@claudus/core';
 import { useApp } from '../store';
@@ -43,6 +44,7 @@ export function DataMenu() {
           <hr />
           <button onClick={open('steering')}>Steering type…</button>
           <button disabled={!box} onClick={open('boxCoords')}>Edit box coords…</button>
+          <DataItems close={() => m.setOpen(false)} />
         </div>
       )}
     </div>

@@ -5,6 +5,8 @@ import {
 } from '@claudus/core';
 import { useApp } from '../store';
 import { NumberCell } from './PointTable';
+import { CoefficientsDialog } from './CoefficientBars';
+import { DamperDialog, TyreDialog } from './DataDialogs';
 import { fmtUnit, labelUnit, unitText, useUnitSettings } from '../units';
 
 /** A text input that commits on Enter or blur. */
@@ -57,11 +59,8 @@ export function ComplianceDialogs({ corner, state, detail }: { corner?: Corner; 
     case 'bushes': return <BushDialog onClose={close} />;
     case 'bushSliders': return <SliderDialog onClose={close} state={state} />;
     case 'springs': return <SpringDialog onClose={close} />;
-    case 'dampers': return <ValuesDialog title="Damper properties" onClose={close} fields={(e) => [
-      ['Damper 1 rate (N.s/mm)', e.dampers[0], (x, v) => { x.dampers[0] = v; }],
-      ['Damper 2 rate (N.s/mm)', e.dampers[1], (x, v) => { x.dampers[1] = v; }],
-    ]} />;
-    case 'tyre': return <ValuesDialog title="Tyre vertical stiffness" onClose={close} fields={(e) => [['Vertical stiffness (N/mm)', e.tyreRate, (x, v) => { x.tyreRate = v; }]]} />;
+    case 'dampers': return <DamperDialog onClose={close} />;
+    case 'tyre': return <TyreDialog onClose={close} showRate />;
     case 'rollbar': return <ValuesDialog title="Roll bar rate" onClose={close} note="Used only when the template has a roll bar." fields={(e) => [['Torsional rate (N.mm/deg)', e.rollBarRate, (x, v) => { x.rollBarRate = v; }]]} />;
     case 'general': return <GeneralDialog onClose={close} />;
     case 'forces': return <ForcesDialog onClose={close} />;
@@ -326,103 +325,6 @@ function ForcesDialog({ onClose }: { onClose: () => void }) {
           </div>
         </div>
       </div>
-    </Dlg>
-  );
-}
-
-/* ---------- coefficients ---------- */
-
-const SHORT = ['Toe', 'Camber', 'Castor', 'KPI', 'WC X', 'WC Y', 'WC Z', 'TCP X', 'TCP Y'];
-
-function CoefficientsDialog({ onClose }: { onClose: () => void }) {
-  useUnitSettings();
-  const end = useApp((s) => s.end);
-  const data = useApp((s) => s.model[s.end]);
-  const compliance = useApp((s) => s.model.compliance);
-  const templatesRev = useApp((s) => s.templatesRev);
-  const edit = useApp((s) => s.editCompliance);
-  const setDialog = useApp((s) => s.setDialog);
-  const [sel, setSel] = useState(0);
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
-  const ref = useRef<HTMLDivElement>(null);
-  const result = useMemo(() => {
-    if (!data) return { error: `This model has no ${end} suspension.` };
-    try {
-      return { sets: complianceCoefficients(new Corner(data, end), compliance ?? defaultCompliance()) };
-    } catch (e) {
-      return { error: (e as Error).message };
-    }
-  }, [data, end, compliance, templatesRev]);
-  useEffect(() => {
-    if (!menu) return;
-    const c = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setMenu(null); };
-    window.addEventListener('mousedown', c);
-    return () => window.removeEventListener('mousedown', c);
-  }, [menu]);
-
-  const sets = result.sets ?? [];
-  const active = compliance?.activeSet ?? 0;
-  const includeSpring = compliance?.settings.includeSpring ?? true;
-  // Each variable has one scale across the sets, so the bars compare between load cases.
-  const scale = COEFFICIENTS.map((c) => Math.max(1e-9, ...sets.map((s) => Math.abs(s.values[c.key]))));
-  const act = {
-    makeActive: () => edit((c) => { c.activeSet = sel; }),
-    toggleSet: () => edit((c) => { c.forceSets[sel].on = !c.forceSets[sel].on; }),
-    allOn: () => edit((c) => { c.forceSets.forEach((f) => { f.on = true; }); }),
-    spring: () => edit((c) => { c.settings.includeSpring = !c.settings.includeSpring; }),
-    forces: () => setDialog('forces'),
-  };
-  const run = (f: () => void) => () => { f(); setMenu(null); };
-  const selOn = sets[sel]?.on ?? true;
-  const W = 340, H = 150, mid = 70, bw = 22;
-  return (
-    <Dlg title={`Compliance coefficients (${end})`} onClose={onClose} wide>
-      <p className="muted small">Compliant minus kinematic value at the static position, per force set. The red outline marks the active set (the one shown in 3D and the graphs). Right-click a chart for more.</p>
-      <div className="row coefbar">
-        <button onClick={act.makeActive} disabled={sel === active}>Make set {sel} active</button>
-        <button onClick={act.toggleSet}>{selOn ? 'Turn set off' : 'Turn set on'}</button>
-        <button onClick={act.allOn}>Turn all on</button>
-        <label className="check"><input type="checkbox" checked={includeSpring} onChange={act.spring} /> Include spring force</label>
-      </div>
-      {result.error && <p className="error">{result.error}</p>}
-      <div className="coefgrid">
-        {sets.map((s) => (
-          <div
-            key={s.set}
-            className={'coefchart' + (s.set === active ? ' active' : '') + (s.set === sel ? ' picked' : '') + (s.on ? '' : ' off')}
-            data-set={s.set}
-            onClick={() => setSel(s.set)}
-            onContextMenu={(e) => { e.preventDefault(); setSel(s.set); setMenu({ x: e.clientX, y: e.clientY }); }}
-          >
-            <div className="coeftitle"><b>{s.set}</b> {s.label}{s.on ? '' : ' (off)'}</div>
-            <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label={`Coefficients for ${s.label}`}>
-              <line x1={0} x2={W} y1={mid} y2={mid} stroke="var(--line)" />
-              {COEFFICIENTS.map((c, k) => {
-                const v = s.values[c.key];
-                const h = (v / scale[k]) * 50;
-                const x = 8 + k * 36;
-                return (
-                  <g key={c.key}>
-                    <title>{`${c.label}: ${fmt(v, 4, c.unit)} ${unitText(c.unit)}`}</title>
-                    <rect x={x} width={bw} y={h >= 0 ? mid - h : mid} height={Math.abs(h)} fill={v >= 0 ? 'var(--accent)' : '#f28e2b'} opacity={s.on ? 1 : 0.35} />
-                    <text x={x + bw / 2} y={H - 22} textAnchor="middle" fontSize="9" fill="var(--muted)">{SHORT[k]}</text>
-                    <text x={x + bw / 2} y={H - 8} textAnchor="middle" fontSize="9" fill="var(--text)">{Math.abs(v) < 0.0005 ? '0' : fmt(v, Math.abs(v) >= 10 ? 1 : 3, c.unit)}</text>
-                  </g>
-                );
-              })}
-            </svg>
-          </div>
-        ))}
-      </div>
-      {menu && (
-        <div className="menulist ctxmenu" ref={ref} style={{ position: 'fixed', left: menu.x, top: menu.y }}>
-          <button disabled={sel === active} onClick={run(act.makeActive)}>Make force set {sel} the default</button>
-          <button onClick={run(act.toggleSet)}>{selOn ? `Turn force set ${sel} off` : `Turn force set ${sel} on`}</button>
-          <button onClick={run(act.allOn)}>Turn all force sets on</button>
-          <button onClick={run(act.spring)}><span className="tick">{includeSpring ? '✓' : ''}</span>Include spring force in set</button>
-          <button onClick={run(act.forces)}>Open external force edit</button>
-        </div>
-      )}
     </Dlg>
   );
 }

@@ -1,5 +1,6 @@
 import type { ComplianceData } from '../compliance/types.js';
 import type { Vec3 } from '../math/vec3.js';
+import type { BodyData, OptimiserFileData } from './extras.js';
 import type { Template } from '../template/types.js';
 
 /** General vehicle data (the SHARK "Parameters" data set). */
@@ -106,6 +107,10 @@ export interface Model {
   templates?: Template[];
   /** Bushes, springs, dampers and force sets for compliant analysis (SHARK's COMPLIANCE section and Claudus extras). */
   compliance?: ComplianceData;
+  /** Body graphics (Claudus section; SHARK's own BODY section is kept as it was). */
+  body?: BodyData;
+  /** Optimiser set-up saved with the file (Include Optimiser Settings in Data Files). */
+  optimiser?: OptimiserFileData;
   /** Order of sections as read, so a written file keeps the same layout. */
   sectionOrder: string[];
   raw: RawSection[];

@@ -31,6 +31,8 @@ export interface ViewSettings {
   showWheels: boolean;
   showPivots: boolean;
   showBody: boolean;
+  /** The body graphics of Data / Body Type. */
+  showBodyGraphics: boolean;
   showGround: boolean;
   showRollCentre: boolean;
   pointNames: boolean;
@@ -47,7 +49,7 @@ export interface ViewSettings {
 
 export const defaultViewSettings: ViewSettings = {
   fill: 'solid', background: '#14171c', dyn: 'rotate', stdView: null, bothEnds: false,
-  showSprings: true, showDampers: true, showWheels: true, showPivots: true, showBody: true, showGround: true, showRollCentre: true,
+  showSprings: true, showDampers: true, showWheels: true, showPivots: true, showBody: true, showBodyGraphics: true, showGround: true, showRollCentre: true,
   pointNames: false, partLabels: false,
   wheelColour: '#2b2f36', springColour: '#a5e887', damperColour: '#ff9d4d', pointColour: '#dfe6ee', bodyColour: '#9aa4b2',
   pointSize: 1, lineSize: 1,

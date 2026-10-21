@@ -41,6 +41,8 @@ export interface AddMode {
   params: number[];
   /** Point numbers picked so far. */
   picked: number[];
+  /** When set, the finished picks go here instead of adding a graphic element (Edit menu flows). */
+  onDone?: (picked: number[]) => void;
 }
 
 export interface AppState {

@@ -99,6 +99,17 @@ export interface ComplianceSettings {
   includeSpring: boolean;
 }
 
+/** One bar of a force set's coefficient chart: a variable with an optional design limit, scale and weight. */
+export interface CoefficientBar {
+  key: string;
+  /** Design limit drawn as a line across the bar; absent for none. */
+  limit?: number;
+  /** Full-scale value of the bar; absent to scale to the largest value over the force sets. */
+  scale?: number;
+  /** Weight in the combined sum. */
+  weight: number;
+}
+
 export interface ComplianceData {
   front?: EndCompliance;
   rear?: EndCompliance;
@@ -107,6 +118,8 @@ export interface ComplianceData {
   forceSets: ForceSet[];
   /** The set shown in the 3D view and graphs. */
   activeSet: number;
+  /** The bars shown for each force set (by set index); a set not listed shows every variable with defaults. */
+  bars?: CoefficientBar[][];
   /** Session switches from the Solve menu (not saved in the file). */
   switches?: SolveSwitches;
 }

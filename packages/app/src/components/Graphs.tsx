@@ -4,7 +4,8 @@ import 'uplot/dist/uPlot.min.css';
 import { deviation, spread, leftRows, lineFromData, lineKey, measureColumns, SWEEP_VARIABLES, unitFactor, unitText, valueOf, type End, type EndAnalysis, type ToleranceAnalysis, type Side, type ResultVar, type Sweep, type UserLine } from '@claudus/core';
 import { useApp } from '../store';
 import { useLab } from '../lab';
-import { defaultOptions, defaultStyle, drawMarker, GraphStyleDialog, type GraphOptions, type Marker } from './GraphOptions';
+import { drawMarker, GraphStyleDialog, type GraphOptions, type Marker } from './GraphOptions';
+import { useSettings } from '../settings';
 import { useUnitSettings } from '../units';
 
 type Mode = 'bump' | 'roll' | 'steer' | 'combined';
@@ -56,20 +57,58 @@ const DEFAULTS: { mode: Mode; key: string }[] = [
   { mode: 'steer', key: 'ackermann' },
 ];
 
+const CHARTS_KEY = 'claudus.graphs';
+interface ChartDef { id: number; mode: Mode; key: string }
+
+/** The graphs that were open last time (kept in localStorage), or the default four. */
+function loadCharts(): ChartDef[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(CHARTS_KEY) ?? 'null');
+    if (Array.isArray(v) && v.every((c) => ['bump', 'roll', 'steer'].includes(c?.mode) && typeof c?.key === 'string'))
+      return v.map((c, id) => ({ id, mode: c.mode, key: c.key }));
+  } catch {
+    /* no saved layout */
+  }
+  return DEFAULTS.map((c, id) => ({ id, ...c }));
+}
+
 export function Graphs({ results, tolerance }: { results?: EndAnalysis[]; tolerance?: ToleranceAnalysis }) {
-  const [charts, setCharts] = useState(DEFAULTS);
+  const [charts, setCharts] = useState<ChartDef[]>(loadCharts);
+  const cmd = useLab((s) => s.graphCmd);
+  const seen = useRef(cmd.n);
+  const nextId = useRef(100);
+  const add = () => setCharts((cs) => [...cs, { id: nextId.current++, mode: 'bump', key: VARIABLES.bump.ys[0].key }]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(CHARTS_KEY, JSON.stringify(charts.map(({ mode, key }) => ({ mode, key }))));
+    } catch {
+      /* storage unavailable: the layout lasts for this session */
+    }
+  }, [charts]);
+  // Menu commands that change the list of graphs.
+  useEffect(() => {
+    if (cmd.n === seen.current) return;
+    seen.current = cmd.n;
+    if (cmd.kind === 'add') add();
+    else if (cmd.kind === 'closeAll') setCharts([]);
+  }, [cmd]);
   return (
     <div className="graphs">
-      {charts.map((c, i) => (
+      {charts.map((c) => (
         <GraphCard
-          key={i}
+          key={c.id}
           results={results}
           tolerance={tolerance}
           mode={c.mode}
           varKey={c.key}
-          onChange={(mode, key) => setCharts(charts.map((cc, j) => (j === i ? { mode, key } : cc)))}
+          onChange={(mode, key) => setCharts((cs) => cs.map((cc) => (cc.id === c.id ? { ...cc, mode, key } : cc)))}
+          onClose={() => setCharts((cs) => cs.filter((cc) => cc.id !== c.id))}
         />
       ))}
+      <div className="graphadd">
+        <button onClick={add} data-testid="add-graph">+ Add graph</button>
+        {charts.length === 0 && <span className="muted small">All graphs are closed.</span>}
+      </div>
     </div>
   );
 }
@@ -89,12 +128,12 @@ export function allLines(results: EndAnalysis[] | undefined, end: End, side: Sid
 
 const SCOPE_ALPHA = ['ff', 'cc', 'a6', '80', '66'];
 const END_NAME = { front: 'Front', rear: 'Rear' } as const;
-const fixed = (v: number | undefined, f = 1) => (v === undefined ? '–' : (v * f).toFixed(3));
+const fixed = (v: number | undefined, f = 1, d = 3) => (v === undefined ? '–' : (v * f).toFixed(d));
 
 /** Per-series drawing info that uPlot's own series options do not cover. */
 interface ColMeta { marker: Marker; colour: string; size: number; grad: boolean }
 
-function GraphCard({ results, tolerance, mode, varKey, onChange }: { results?: EndAnalysis[]; tolerance?: ToleranceAnalysis; mode: Mode; varKey: string; onChange: (m: Mode, k: string) => void }) {
+function GraphCard({ results, tolerance, mode, varKey, onChange, onClose }: { results?: EndAnalysis[]; tolerance?: ToleranceAnalysis; mode: Mode; varKey: string; onChange: (m: Mode, k: string) => void; onClose: () => void }) {
   const base = VARIABLES[mode];
   const extra = useMemo(() => measureVars(results), [results]);
   // A steering box turns an arm, so steering travel is an angle.
@@ -113,7 +152,13 @@ function GraphCard({ results, tolerance, mode, varKey, onChange }: { results?: E
   const cmd = useLab((s) => s.graphCmd);
   const lab = useLab.getState;
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
-  const [opts, setOpts] = useState<GraphOptions>(defaultOptions);
+  const style = useSettings((s) => s.settings.style);
+  const setStyle = useSettings((s) => s.setStyle);
+  const prefs = useSettings((s) => s.settings);
+  const yInc = useLab((s) => s.yIncrement);
+  const [swap, setSwap] = useState(false);
+  const opts: GraphOptions = useMemo(() => ({ swap, style }), [swap, style]);
+  const setOpts = (o: GraphOptions) => { setSwap(o.swap); if (o.style !== style) setStyle(o.style); };
   const [view, setView] = useState<View | null>(null);
   const [styling, setStyling] = useState(false);
 
@@ -123,8 +168,9 @@ function GraphCard({ results, tolerance, mode, varKey, onChange }: { results?: E
     if (cmd.n === seen.current) return;
     seen.current = cmd.n;
     if (cmd.kind === 'autoscale') setView(null);
-    else if (cmd.kind === 'swap') setOpts((o) => ({ ...o, swap: !o.swap }));
-    else setOpts((o) => ({ ...o, style: defaultStyle() }));
+    else if (cmd.kind === 'autoscaleY') setView((v) => (v?.x ? { x: v.x } : null));
+    else if (cmd.kind === 'swap') setSwap((w) => !w);
+    else if (cmd.kind === 'styles') useSettings.getState().reset();
   }, [cmd]);
 
   const ends = useMemo(() => (results ?? []).filter((r) => r[mode].length > 0), [results, mode]);
@@ -150,7 +196,7 @@ function GraphCard({ results, tolerance, mode, varKey, onChange }: { results?: E
           const colour = st.scope.colour + SCOPE_ALPHA[i];
           cols.push({
             s: { label: `Scope ${i + 1}${ends.length > 1 ? ' ' + END_NAME[e.end].toLowerCase() : ''}`, stroke: colour, width: 1.5, dash: [6, 4], spanGaps: true, points: { show: false } },
-            meta: { marker: st.scope.marker, colour, size: 3, grad: false },
+            meta: { marker: st.scope.marker, colour, size: prefs.markerSize, grad: false },
             m: rowsMap(r[mode] as any[]),
           });
         }
@@ -172,7 +218,7 @@ function GraphCard({ results, tolerance, mode, varKey, onChange }: { results?: E
           if (!l) continue;
           cols.push({
             s: { label: `User${ends.length > 1 ? ' ' + END_NAME[e.end].toLowerCase() : ''}${sideName(side)}`, stroke: st.user.colour, width: 2, dash: side === 'left' ? [3, 3] : undefined, spanGaps: true, points: { show: false } },
-            meta: { marker: st.user.marker, colour: st.user.colour, size: 4, grad: false },
+            meta: { marker: st.user.marker, colour: st.user.colour, size: prefs.markerSize + 1, grad: false },
             m: new Map(l.points.map(([px, py]) => [px * fx, py * fy] as [number, number | null])),
           });
         }
@@ -181,7 +227,7 @@ function GraphCard({ results, tolerance, mode, varKey, onChange }: { results?: E
         const ls = e.end === 'front' ? st.dataFront : st.dataRear;
         cols.push({
           s: { label: END_NAME[e.end] + sideName(side), stroke: ls.colour, width: 2, dash: side === 'left' ? [8, 4] : undefined, spanGaps: true, points: { show: false } },
-          meta: { marker: ls.marker, colour: ls.colour, size: 3, grad: true },
+          meta: { marker: ls.marker, colour: ls.colour, size: prefs.markerSize, grad: true },
           m: rowsMap((side === 'left' ? leftRows(e[mode] as any[], mode as Sweep) : e[mode]) as any[]),
         });
       }
@@ -192,7 +238,7 @@ function GraphCard({ results, tolerance, mode, varKey, onChange }: { results?: E
       metas: cols.map((c) => c.meta),
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ends, y, def, userLines, scope, vis.scope, vis.userLine, vis.left, mode, opts.style, fx, fy, tolerance]);
+  }, [ends, y, def, userLines, scope, vis.scope, vis.userLine, vis.left, mode, opts.style, fx, fy, prefs.markerSize, tolerance]);
 
   const devs = useMemo(() => mode === 'combined' ? [] : ends.flatMap((e) => sides.map((side) => {
     const l = lineFor(e.end, side);
@@ -226,8 +272,9 @@ function GraphCard({ results, tolerance, mode, varKey, onChange }: { results?: E
         <select value={y.key} onChange={(e) => { onChange(mode, e.target.value); setView(null); }}>
           {def.ys.map((v) => <option key={v.key} value={v.key}>{v.label}</option>)}
         </select>
-        <button className="icon" title="Switch the x and y axes" aria-label="Switch x-y" aria-pressed={opts.swap} onClick={() => setOpts({ ...opts, swap: !opts.swap })}>⇄</button>
+        <button className="icon" title="Switch the x and y axes" aria-label="Switch x-y" aria-pressed={opts.swap} onClick={() => setSwap(!swap)}>⇄</button>
         <button className="icon" title="Autoscale (or double-click the graph). Drag a box on the graph to zoom." aria-label="Autoscale" disabled={!view} onClick={() => setView(null)}>⤢</button>
+        <button className="icon" title="Close this graph" aria-label="Close graph" onClick={onClose}>✕</button>
         <button className="icon" title="User lines, scope lines and appearance (or right-click the graph)" aria-label="Graph menu" onClick={(e) => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setMenu({ x: r.left, y: r.bottom }); }}>⋯</button>
       </div>
       {vis.deviation && devs.length > 0 && (
@@ -235,7 +282,7 @@ function GraphCard({ results, tolerance, mode, varKey, onChange }: { results?: E
           {devs.map((d) => (
             <span key={d.end + d.side}>
               {ends.length > 1 || sides.length > 1 ? `${END_NAME[d.end]}${sideName(d.side)}: ` : ''}
-              user deviation <b>{fixed(d.user, fy)}</b> · scope {devSlot + 1} deviation <b>{fixed(d.scope, fy)}</b>
+              user deviation <b>{fixed(d.user, fy, prefs.decimals)}</b> · scope {devSlot + 1} deviation <b>{fixed(d.scope, fy, prefs.decimals)}</b>
             </span>
           ))}
         </div>
@@ -243,6 +290,7 @@ function GraphCard({ results, tolerance, mode, varKey, onChange }: { results?: E
       {data ? (
         <Plot
           data={data} series={series} metas={metas} swap={opts.swap} view={view} onView={setView} showSlope={vis.derivative}
+          textSize={prefs.textSize} decimals={prefs.decimals} scopeSymbol={prefs.scopeSymbol} yInc={yInc > 0 ? yInc : 0}
           xLabel={def.x.unit ? `${def.x.label} (${unitText(def.x.unit, units)})` : def.x.label} yLabel={y.unit ? `${y.label} (${unitText(y.unit, units)})` : y.label} marker={current}
         />
       ) : (
@@ -270,10 +318,12 @@ function GraphCard({ results, tolerance, mode, varKey, onChange }: { results?: E
             <span className="tick">{vis.derivative ? '✓' : ''}</span>Show derivative values
           </button>
           <hr />
-          <button role="menuitemcheckbox" aria-checked={opts.swap} onClick={run(() => setOpts({ ...opts, swap: !opts.swap }))}>
+          <button role="menuitemcheckbox" aria-checked={opts.swap} onClick={run(() => setSwap(!swap))}>
             <span className="tick">{opts.swap ? '✓' : ''}</span>Switch x-y axis
           </button>
           <button disabled={!view} onClick={run(() => setView(null))}>Autoscale</button>
+          <button disabled={!view?.y} onClick={run(() => setView(view?.x ? { x: view.x } : null))}>Autoscale Y only</button>
+          <button onClick={run(onClose)}>Close graph</button>
           <button onClick={run(() => setStyling(true))}>Colours and markers…</button>
         </GraphMenu>
       )}
@@ -322,17 +372,31 @@ export function slopeAt(nodes: { x: number; m: number }[], x: number): number | 
   return undefined;
 }
 
-function Plot({ data, series, metas, swap, view, onView, showSlope, xLabel, yLabel, marker }: {
+function Plot({ data, series, metas, swap, view, onView, showSlope, xLabel, yLabel, marker, textSize, decimals, scopeSymbol, yInc }: {
   data: uPlot.AlignedData; series: uPlot.Series[]; metas: ColMeta[]; swap: boolean; view: View | null; onView: (v: View | null) => void;
-  showSlope: boolean; xLabel: string; yLabel: string; marker: number;
+  showSlope: boolean; xLabel: string; yLabel: string; marker: number; textSize: number; decimals: number; scopeSymbol: Marker; yInc: number;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const plot = useRef<uPlot | null>(null);
-  const live = useRef({ marker, metas, view, onView, showSlope });
-  live.current = { marker, metas, view, onView, showSlope };
+  const live = useRef({ marker, metas, view, onView, showSlope, textSize, decimals, scopeSymbol, yInc });
+  live.current = { marker, metas, view, onView, showSlope, textSize, decimals, scopeSymbol, yInc };
 
   useEffect(() => {
     const el = ref.current!;
+    // With a Y increment set, the Y axis is marked in steps of it (a multiple of it when they would crowd).
+    const ySplits: uPlot.Axis.Splits = (_u, _i, min, max, incr, space) => {
+      const inc = live.current.yInc;
+      if (!(inc > 0)) {
+        const base: number[] = [];
+        for (let v = Math.ceil(min / incr - 1e-9) * incr; v <= max + 1e-9; v += incr) base.push(Number(v.toPrecision(12)));
+        return base;
+      }
+      const axisPx = Math.max(1, _u.bbox.height / uPlot.pxRatio);
+      const step = inc * Math.max(1, Math.ceil(((max - min) / inc) / Math.max(1, axisPx / Math.max(20, space / uPlot.pxRatio))));
+      const out: number[] = [];
+      for (let v = Math.ceil(min / step - 1e-9) * step; v <= max + 1e-9; v += step) out.push(Number(v.toPrecision(12)));
+      return out.length ? out : [min, max];
+    };
     const axisStyle = { stroke: '#aab4c3', grid: { stroke: '#2a313b', width: 1 }, ticks: { stroke: '#2a313b', width: 1 } };
     const opts: uPlot.Options = {
       width: el.clientWidth,
@@ -345,6 +409,13 @@ function Plot({ data, series, metas, swap, view, onView, showSlope, xLabel, yLab
           range: (_u, min, max) => {
             if (live.current.view?.y) return live.current.view.y;
             if (min == null || max == null || !Number.isFinite(min) || !Number.isFinite(max)) return [-1, 1];
+            // Autoscale to the Y increment: whole steps that cover the data.
+            const inc = live.current.yInc;
+            if (inc > 0) {
+              const lo = Math.floor(min / inc + 1e-9) * inc;
+              const hi = Math.ceil(max / inc - 1e-9) * inc;
+              return hi > lo ? [lo, hi] : [lo - inc, lo + inc];
+            }
             const span = Math.max(max - min, 1e-3 * Math.max(1, Math.abs(min), Math.abs(max)), 0.01);
             const mid = (max + min) / 2;
             const pad = span * 0.55;
@@ -355,8 +426,8 @@ function Plot({ data, series, metas, swap, view, onView, showSlope, xLabel, yLab
       legend: { show: true },
       cursor: { drag: { x: true, y: true, setScale: false } },
       axes: swap
-        ? [{ ...axisStyle, scale: 'x', side: 3, label: xLabel, size: 60 }, { ...axisStyle, scale: 'y', side: 2, label: yLabel }]
-        : [{ ...axisStyle, scale: 'x', label: xLabel }, { ...axisStyle, scale: 'y', label: yLabel, size: 60 }],
+        ? [{ ...axisStyle, scale: 'x', side: 3, label: xLabel, size: 60 }, { ...axisStyle, scale: 'y', side: 2, label: yLabel, splits: ySplits }]
+        : [{ ...axisStyle, scale: 'x', label: xLabel }, { ...axisStyle, scale: 'y', label: yLabel, size: 60, splits: ySplits }],
       series: [{ label: xLabel }, ...series],
       hooks: {
         init: [(u) => { u.over.addEventListener('dblclick', () => live.current.onView(null)); }],
@@ -405,7 +476,8 @@ function Plot({ data, series, metas, swap, view, onView, showSlope, xLabel, yLab
               ctx.setLineDash([]);
             }
             const xs = u.data[0] as number[];
-            ctx.font = `${10 * px}px sans-serif`;
+            ctx.font = `${live.current.textSize * px}px sans-serif`;
+            const dec = live.current.decimals;
             let slopeRow = 0;
             live.current.metas.forEach((meta, i) => {
               const ys = u.data[i + 1] as (number | null)[];
@@ -419,6 +491,19 @@ function Plot({ data, series, metas, swap, view, onView, showSlope, xLabel, yLab
                   const [cx, cy] = at(xv, yv);
                   if (inside(cx, cy)) drawMarker(ctx, meta.marker, cx, cy, meta.size * px);
                 });
+              if (meta.grad && live.current.scopeSymbol !== 'none') {
+                const yAt = interpolateNodes(nodeSlopes(xs, ys), m);
+                if (yAt !== undefined) {
+                  const [cx, cy] = at(m, yAt);
+                  ctx.strokeStyle = '#ffe066';
+                  ctx.fillStyle = '#ffe066';
+                  ctx.lineWidth = 2 * px;
+                  drawMarker(ctx, live.current.scopeSymbol, cx, cy, (meta.size + 2) * px);
+                  ctx.strokeStyle = meta.colour;
+                  ctx.fillStyle = meta.colour;
+                  ctx.lineWidth = 1.5 * px;
+                }
+              }
               if (live.current.showSlope && meta.grad) {
                 const nodes = nodeSlopes(xs, ys);
                 // Each point's gradient; with many points only the static value is listed.
@@ -427,22 +512,22 @@ function Plot({ data, series, metas, swap, view, onView, showSlope, xLabel, yLab
                   for (const n of nodes) {
                     if (!Number.isFinite(n.m)) continue;
                     const [cx, cy] = at(n.x, n.y);
-                    if (inside(cx, cy)) ctx.fillText(n.m.toFixed(3), cx + 4 * px, cy - 6 * px);
+                    if (inside(cx, cy)) ctx.fillText(n.m.toFixed(dec), cx + 4 * px, cy - 6 * px);
                   }
                   ctx.globalAlpha = 1;
                 }
                 const g = slopeAt(nodes, m);
                 if (g !== undefined && Number.isFinite(g)) {
                   const yAt = nodes.length ? interpolateNodes(nodes, m) : undefined;
-                  ctx.font = `bold ${11 * px}px sans-serif`;
-                  const label = `slope ${g.toFixed(3)}`;
+                  ctx.font = `bold ${(live.current.textSize + 1) * px}px sans-serif`;
+                  const label = `slope ${g.toFixed(dec)}`;
                   const [cx, cy] = yAt === undefined ? [left + 6 * px, top + (14 + 14 * slopeRow) * px] : at(m, yAt);
                   ctx.fillStyle = '#ffe066';
                   ctx.fillText(label, Math.min(cx + 8 * px, left + width - 130 * px), Math.max(cy - (12 + 12 * slopeRow) * px, top + 12 * px));
                   ctx.beginPath();
                   ctx.arc(cx, cy, 4 * px, 0, Math.PI * 2);
                   ctx.stroke();
-                  ctx.font = `${10 * px}px sans-serif`;
+                  ctx.font = `${live.current.textSize * px}px sans-serif`;
                   slopeRow++;
                 }
               }
@@ -461,7 +546,8 @@ function Plot({ data, series, metas, swap, view, onView, showSlope, xLabel, yLab
   }, [xLabel, yLabel, swap, series.map((s) => String(s.label) + String(s.stroke) + String(s.dash)).join()]);
 
   useEffect(() => { plot.current?.setData(data); }, [data, view]);
-  useEffect(() => { plot.current?.redraw(false); }, [marker, metas, showSlope]);
+  useEffect(() => { plot.current?.redraw(false); }, [marker, metas, showSlope, textSize, decimals, scopeSymbol]);
+  useEffect(() => { plot.current?.setData(data); }, [yInc]);
 
   return <div className="plot" ref={ref} />;
 }

@@ -12,6 +12,9 @@ import { dataPoints, type Template } from '../template/types.js';
 import {
   CLAUDUS_COMPLIANCE_SECTION, claudusComplianceLines, complianceLines, parseClaudusCompliance, parseCompliance, type PointOrder,
 } from '../compliance/io.js';
+import {
+  CLAUDUS_BODY_SECTION, CLAUDUS_OPTIMISER_SECTION, claudusBodyLines, claudusOptimiserLines, parseClaudusBody, parseClaudusOptimiser,
+} from '../model/extras.js';
 import { defaultCompliance, type ComplianceData } from '../compliance/types.js';
 import { combinedLines, extendedBumpLines, parseCombined, parseExtendedBump } from '../model/combined.js';
 import { limitsLines, parseLimits } from '../model/limits.js';
@@ -21,10 +24,10 @@ import { defaultParams, type Model, type PointGroup, type RawSection, type Suspe
 export const KNOWN_SECTIONS = [
   'VERSION', 'PARAMETERS', 'FRONT SUSPENSION', 'REAR SUSPENSION', 'TOLERANCES', 'TITLES', 'TYRE', 'BODY',
   'FORMULA', 'ROLL SOLUTION', 'GROUPS', 'COMPLIANCE', 'FORCES', 'FSETS', 'RAVEN_DEFAULTS', 'EXTENDED BUMP',
-  'COMBINED', 'USER LINES', 'USER TEMPLATES', 'CLAUDUS COMPLIANCE', 'CLAUDUS LIMITS', 'CLAUDUS STEERING', 'CLAUDUS COMBINED', 'CLAUDUS EXTENDED BUMP',
+  'COMBINED', 'USER LINES', 'USER TEMPLATES', 'CLAUDUS COMPLIANCE', 'CLAUDUS LIMITS', 'CLAUDUS STEERING', 'CLAUDUS COMBINED', 'CLAUDUS EXTENDED BUMP', 'CLAUDUS BODY', 'CLAUDUS OPTIMISER',
 ] as const;
 
-const PARSED = new Set(['VERSION', 'PARAMETERS', 'FRONT SUSPENSION', 'REAR SUSPENSION', 'TOLERANCES', 'TITLES', 'TYRE', 'ROLL SOLUTION', 'GROUPS', 'USER TEMPLATES', 'CLAUDUS COMPLIANCE', 'CLAUDUS LIMITS', 'CLAUDUS STEERING', 'CLAUDUS COMBINED', 'CLAUDUS EXTENDED BUMP']);
+const PARSED = new Set(['VERSION', 'PARAMETERS', 'FRONT SUSPENSION', 'REAR SUSPENSION', 'TOLERANCES', 'TITLES', 'TYRE', 'ROLL SOLUTION', 'GROUPS', 'USER TEMPLATES', 'CLAUDUS COMPLIANCE', 'CLAUDUS LIMITS', 'CLAUDUS STEERING', 'CLAUDUS COMBINED', 'CLAUDUS EXTENDED BUMP', 'CLAUDUS BODY', 'CLAUDUS OPTIMISER']);
 
 const nums = (line: string | undefined): number[] =>
   (line ?? '').trim() === '' ? [] : (line as string).trim().split(/[\s,]+/).map((s) => Number(s.replace(/[dD]/, 'E')));
@@ -141,9 +144,19 @@ export function readDat(text: string): Model {
     ...(steering ? { steering } : {}),
     ...(templates ? { templates } : {}),
     ...(compliance ? { compliance } : {}),
+    ...claudusExtras(get(CLAUDUS_BODY_SECTION)?.lines, get(CLAUDUS_OPTIMISER_SECTION)?.lines),
     sectionOrder: sections.map((s) => s.name),
     raw: sections.filter((s) => !PARSED.has(s.name)),
   };
+}
+
+function claudusExtras(body: string[] | undefined, opt: string[] | undefined): Pick<Model, 'body' | 'optimiser'> {
+  const out: Pick<Model, 'body' | 'optimiser'> = {};
+  const b = body && parseClaudusBody(body);
+  if (b) out.body = b;
+  const o = opt && parseClaudusOptimiser(opt);
+  if (o) out.optimiser = o;
+  return out;
 }
 
 // ---- compliance ----------------------------------------------------------------------------------
@@ -237,6 +250,8 @@ export function writeDat(m: Model): string {
   const c = m.compliance;
   if (c && !order.includes('COMPLIANCE')) order.push('COMPLIANCE');
   if (c && !unedited(c) && !order.includes(CLAUDUS_COMPLIANCE_SECTION)) order.splice(order.indexOf('COMPLIANCE') + 1, 0, CLAUDUS_COMPLIANCE_SECTION);
+  if (m.body && !order.includes(CLAUDUS_BODY_SECTION)) order.push(CLAUDUS_BODY_SECTION);
+  if (m.optimiser && !order.includes(CLAUDUS_OPTIMISER_SECTION)) order.push(CLAUDUS_OPTIMISER_SECTION);
   for (const name of order) {
     const body: string[] = [];
     switch (name) {
@@ -290,6 +305,14 @@ export function writeDat(m: Model): string {
       case CLAUDUS_COMPLIANCE_SECTION:
         if (!c || unedited(c)) continue;
         body.push(...claudusComplianceLines(c));
+        break;
+      case CLAUDUS_BODY_SECTION:
+        if (!m.body) continue;
+        body.push(...claudusBodyLines(m.body));
+        break;
+      case CLAUDUS_OPTIMISER_SECTION:
+        if (!m.optimiser) continue;
+        body.push(...claudusOptimiserLines(m.optimiser));
         break;
       case 'CLAUDUS COMBINED':
         if (!writeC) continue;

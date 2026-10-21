@@ -142,7 +142,7 @@ export function SavedViewsDialog({ onClose }: { onClose: () => void }) {
 
 const VIS: [keyof ViewSettings, string][] = [
   ['showSprings', 'Springs'], ['showDampers', 'Dampers'], ['showWheels', 'Wheels'], ['showPivots', 'Pivot axes'],
-  ['showBody', 'Body (ground) points'], ['showGround', 'Ground grid'], ['showRollCentre', 'Roll centre'],
+  ['showBody', 'Body (ground) points'], ['showBodyGraphics', 'Body graphics'], ['showGround', 'Ground grid'], ['showRollCentre', 'Roll centre'],
 ];
 const LABELS: [keyof ViewSettings, string][] = [['pointNames', 'Point names'], ['partLabels', 'Part labels'], ['bothEnds', 'Show front and rear together']];
 const COLOURS: [keyof ViewSettings, string][] = [

@@ -4,6 +4,7 @@ import { movePoint, trackingAxes, useEdit, type ChangeMode, type ModifyMode, typ
 import { cameraApi, cycleDyn, dominantAxis, useViewCtl } from '../viewCtl';
 import { Dlg } from './ComplianceDialogs';
 import { NumberCell } from './PointTable';
+import { EditItems } from './DataMenu';
 
 const typing = (e: KeyboardEvent) => /INPUT|SELECT|TEXTAREA/.test((e.target as HTMLElement).tagName);
 
@@ -63,7 +64,7 @@ const MODES: [ModifyMode, string][] = [['edit', 'Edit (type values)'], ['joggle'
 const TRACKS: [Tracking, string][] = [['all', 'All'], ['x', 'X'], ['y', 'Y'], ['z', 'Z']];
 
 /** SHARK's Edit menu (undo, redo, modify and change modes, tracking, temporary group) and SetUp / Gen Defaults. */
-export function EditMenu() {
+export function EditMenu({ onError }: { onError: (msg: string | null) => void }) {
   const [open, setOpen] = useState(false);
   const [defaults, setDefaults] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -111,6 +112,7 @@ export function EditMenu() {
           {check(ed.coincidence, 'Point coincidence', () => ed.set({ coincidence: !ed.coincidence }))}
           <hr />
           <button onClick={() => { setOpen(false); setDefaults(true); }}>Gen defaults / undo buffer…</button>
+          <EditItems onError={onError} close={() => setOpen(false)} />
         </div>
       )}
       {defaults && <GenDefaults onClose={() => setDefaults(false)} />}

@@ -11,7 +11,8 @@ import { pickPoint } from '../graphicsActions';
 import { fmtUnit, useUnitSettings } from '../units';
 import { registerCanvas } from '../video';
 import { GraphicElements } from './GraphicShapes';
-import { CogScene, ComplianceScene, FreeBodyForces } from './ComplianceScene';
+import { BodyGraphics } from './BodyGraphics';
+import { CogScene,ComplianceScene, FreeBodyForces } from './ComplianceScene';
 
 const MM = 0.001; // scene units are metres
 const DYN_BUTTON = { rotate: THREE.MOUSE.ROTATE, pan: THREE.MOUSE.PAN, zoom: THREE.MOUSE.DOLLY } as const;
@@ -226,6 +227,7 @@ interface Props {
 export function Viewer3D({ corner, state, detail, ghosts, freeBody }: Props) {
   const view = useApp((s) => s.view);
   const compliant = useApp((s) => s.compliant);
+  const wheelbase = useApp((s) => s.model.params.wheelbase);
   const vc = useViewCtl();
   const wc = corner.mech.staticPoints[corner.mech.wheelCentre];
   // Centre the scene on the axle so the camera orbits around the car's centreline at this end.
@@ -259,6 +261,7 @@ export function Viewer3D({ corner, state, detail, ghosts, freeBody }: Props) {
         ))}
           </>
         )}
+        <BodyGraphics frontX={corner.end === 'front' ? wc[0] : wc[0] - wheelbase} groundZ={state.right.groundZ} />
         <LimitBoxes />
         {vc.showGround && <Ground z={state.right.groundZ} x={wc[0]} />}
         {vc.showRollCentre && <RollCentre rc={state.rollCentre} />}

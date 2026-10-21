@@ -148,6 +148,11 @@ export function claudusComplianceLines(data: ComplianceData): string[] {
     for (const fc of fs.forces)
       out.push(`FORCE ${fc.end} ${fc.on ? 1 : 0}${[fc.part, fc.at, fc.magnitude, ...fc.head, ...fc.tail].map(num).join('')} ${quote(fc.label)}`);
   }
+  data.bars?.forEach((bars, set) => {
+    if (!bars) return;
+    out.push(`BARSET ${set}`);
+    for (const b of bars) out.push(`BAR ${set} ${b.key} ${b.limit === undefined ? '-' : b.limit} ${b.scale === undefined ? '-' : b.scale} ${b.weight}`);
+  });
   return out;
 }
 
@@ -186,6 +191,12 @@ export function parseClaudusCompliance(lines: string[], into: ComplianceData = d
         part: n[0], mass: n[1], inertia: [n[2], n[3], n[4], n[5], n[6], n[7]],
         cog: numsRef(n.slice(8, 12)), zAxis: numsRef(n.slice(12, 16)), xzPlane: numsRef(n.slice(16, 20)),
       });
+    } else if (word === 'BARSET') {
+      (into.bars ??= [])[Number(rest[0])] = [];
+    } else if (word === 'BAR') {
+      const [set, key, limit, scale, weight] = rest;
+      const list = ((into.bars ??= [])[Number(set)] ??= []);
+      list.push({ key, ...(limit !== '-' ? { limit: Number(limit) } : {}), ...(scale !== '-' ? { scale: Number(scale) } : {}), weight: Number(weight) });
     } else if (word === 'SET') {
       sets.push({ on: v[0] !== '0', label, forces: [] });
     } else if (word === 'FORCE' && sets.length) {
