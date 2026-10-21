@@ -23,12 +23,15 @@ export interface GraphicsView {
   showBushAxes: boolean;
   showForces: boolean;
   showJointForces: boolean;
+  /** Part C of G markers and their local axes (compliant mode only). */
+  showCog: boolean;
+  showCogAxes: boolean;
 }
 
 /** The compliance dialogs and result windows. */
 export type ComplianceDialogId =
   | 'bushes' | 'bushSliders' | 'springs' | 'dampers' | 'tyre' | 'rollbar' | 'general' | 'forces'
-  | 'coefficients' | 'joints' | 'loads';
+  | 'coefficients' | 'joints' | 'loads' | 'massData';
 
 /** An element being added: the picks made so far, in order. */
 export interface AddMode {
@@ -74,7 +77,7 @@ export interface AppState {
   /** Bumped when the set of templates changes, so lists of them refresh. */
   templatesRev: number;
   setModel: (m: Model, fileName: string) => void;
-  /** Replace the whole model after an edit that touches both ends (such as Set Ride Height). */
+  /** Swap the model for an edited copy (the optimiser's result or its revert, Set Ride Height) without resetting the view. */
   replaceModel: (m: Model) => void;
   setEnd: (e: End) => void;
   setArt: (a: Partial<ArticulationState>) => void;
@@ -100,7 +103,7 @@ export const useApp = create<AppState>((set, get) => ({
   end: 'front',
   art: zeroArt,
   selected: null,
-  view: { pointNos: false, pointValues: false, bothSides: true, triad: false, showBushes: true, showBushAxes: true, showForces: true, showJointForces: false },
+  view: { pointNos: false, pointValues: false, bothSides: true, triad: false, showBushes: true, showBushAxes: true, showForces: true, showJointForces: false, showCog: true, showCogAxes: false },
   compliant: false,
   setCompliant: (compliant) => set({ compliant }),
   forcesOn: true,
@@ -132,7 +135,7 @@ export const useApp = create<AppState>((set, get) => ({
       loaded.templates?.forEach(registerTemplate);
       return { model: completeModel(loaded), fileName, compliant: false, bushPoint: null, templatesRev: s.templatesRev + (loaded.templates?.length ? 1 : 0), dirty: false, end: loaded.front ? 'front' : 'rear', art: zeroArt, selected: null, selectedGraphic: null, addMode: null, revision: s.revision + 1 };
     }),
-  replaceModel: (model) => set((s) => ({ model, dirty: true, art: zeroArt, revision: s.revision + 1 })),
+  replaceModel: (model) => set((s) => ({ model, dirty: true, revision: s.revision + 1 })),
   setEnd: (end) => set({ end, art: zeroArt, selected: null, selectedGraphic: null, addMode: null }),
   setArt: (a) => set((s) => ({ art: { ...s.art, ...a } })),
   select: (selected) => set({ selected }),

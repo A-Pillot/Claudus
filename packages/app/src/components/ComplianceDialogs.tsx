@@ -7,7 +7,7 @@ import { useApp } from '../store';
 import { NumberCell } from './PointTable';
 
 /** A text input that commits on Enter or blur. */
-function TextCell({ value, onCommit, className }: { value: string; onCommit: (v: string) => void; className?: string }) {
+export function TextCell({ value, onCommit, className }: { value: string; onCommit: (v: string) => void; className?: string }) {
   const [text, setText] = useState(value);
   useEffect(() => setText(value), [value]);
   return (
@@ -21,7 +21,7 @@ function TextCell({ value, onCommit, className }: { value: string; onCommit: (v:
   );
 }
 
-function Dlg({ title, onClose, wide, float, children }: { title: string; onClose: () => void; wide?: boolean; float?: boolean; children: React.ReactNode }) {
+export function Dlg({ title, onClose, wide, float, children }: { title: string; onClose: () => void; wide?: boolean; float?: boolean; children: React.ReactNode }) {
   useEffect(() => {
     const key = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', key);
@@ -38,7 +38,7 @@ function Dlg({ title, onClose, wide, float, children }: { title: string; onClose
   );
 }
 
-function useEndInfo() {
+export function useEndInfo() {
   const end = useApp((s) => s.end);
   const sdata = useApp((s) => s.model[s.end]);
   const compliance = useApp((s) => s.model.compliance);
@@ -46,7 +46,7 @@ function useEndInfo() {
   return { end, template, data: endCompliance(compliance, end), compliance };
 }
 
-const fmt = (v: number, d = 3) => (Number.isFinite(v) ? v.toFixed(d) : '–');
+export const fmt = (v: number, d = 3) => (Number.isFinite(v) ? v.toFixed(d) : '–');
 
 export function ComplianceDialogs({ corner, state, detail }: { corner?: Corner; state?: AxleState; detail?: ComplianceResult }) {
   const dialog = useApp((s) => s.dialog);
@@ -75,7 +75,7 @@ export function ComplianceDialogs({ corner, state, detail }: { corner?: Corner; 
 
 const KIND_LABEL: Record<AxisRef['kind'], string> = { none: 'None (global axes)', point: 'Model point', rel: 'Relative', abs: 'Absolute' };
 
-function AxisEditor({ label, value, onChange, fallback }: { label: string; value: AxisRef; onChange: (r: AxisRef) => void; fallback: Vec3 }) {
+export function AxisEditor({ label, value, onChange, fallback }: { label: string; value: AxisRef; onChange: (r: AxisRef) => void; fallback: Vec3 }) {
   const { template } = useEndInfo();
   const first = template?.points.find((p) => !p.dummy)?.no ?? 1;
   const pick = (kind: AxisRef['kind']) => {

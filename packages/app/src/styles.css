@@ -273,4 +273,54 @@ table.grid tr.st-undefined td, table.grid tr.st-derived td { opacity: 0.75; }
 .coeftitle { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .coefbar { flex-wrap: wrap; }
 .ctxmenu { min-width: 260px; }
+
+/* Phase 5: user lines, kinematic sum, optimiser, modal and forced response */
+.graphcard .u-legend .u-series:first-child { display: none; }
+.devline { padding: 0 8px 4px; font-size: 11px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.devline b { color: #7ee787; font-variant-numeric: tabular-nums; }
+.graphhead .icon { margin-left: auto; }
+.scopebtns, .menurow { display: flex; align-items: center; gap: 3px; padding: 2px 8px; }
+.menurow > span { min-width: 104px; color: var(--muted); font-size: 12px; }
+.scopebtns button, .menurow button { text-align: center; padding: 1px 7px; border: 1px solid var(--line); background: var(--panel2); }
+.menulist .scopebtns button.on, .menurow button.on { background: #23415f; border-color: var(--accent); }
+.menulist.wide { min-width: 360px; }
+.rowbtns { display: flex; gap: 4px; justify-content: flex-end; }
+.ctable tr.off td { opacity: 0.5; }
+.addrow { border: 1px solid var(--line); border-radius: 5px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 4px 8px 8px; margin: 0; }
+.addrow legend { color: var(--muted); font-size: 11px; padding: 0 4px; }
+.inl { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
+.inl .numcell { width: 70px; }
+.sumtotal { font-size: 15px; font-variant-numeric: tabular-nums; }
+.sumtotal b { color: #7ee787; }
+.warn { color: #e8c76a; }
+.tblwrap.short { max-height: 160px; }
+.spark { width: 100%; height: 70px; background: #10151b; border: 1px solid var(--line); border-radius: 5px; }
+.rolling { display: flex; flex-direction: column; gap: 4px; }
+.settings { flex-wrap: wrap; }
+
+.panel { position: fixed; z-index: 12; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 10px 28px rgba(0, 0, 0, .55); max-width: calc(100vw - 16px); display: flex; flex-direction: column; }
+.panelhead { display: flex; align-items: center; justify-content: space-between; padding: 6px 8px 6px 12px; border-bottom: 1px solid var(--line); cursor: move; user-select: none; touch-action: none; }
+.panelbody { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; max-height: calc(100vh - 110px); overflow: auto; }
+.panelbody .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.panelbody .row .grow { flex: 1; }
+.panelbody .tblwrap { overflow: auto; max-height: 260px; border: 1px solid var(--line); border-radius: 5px; }
+.panelbody .numcell { width: 76px; }
+
+.displaybar { position: absolute; left: 12px; bottom: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; background: rgba(23, 27, 33, 0.92); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; max-width: calc(100% - 100px); }
+.displaybar label { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); }
+.displaybar input[type='number'] { width: 56px; }
+.displaybar .numcell { width: 60px; }
+.displaybar input[type='range'] { width: 130px; accent-color: var(--accent); }
+.overlay.caption { top: 44px; color: #22d3ee; }
+.chart { width: 100%; height: auto; background: #10151b; border: 1px solid var(--line); border-radius: 5px; }
+.sweep { cursor: crosshair; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; }
+.massgrid { display: grid; grid-template-columns: 300px 1fr; gap: 12px; min-height: 0; }
+.partlist { display: flex; flex-direction: column; gap: 3px; max-height: 56vh; overflow: auto; }
+.partlist button { text-align: left; }
+.massdetail { display: flex; flex-direction: column; gap: 8px; }
+.inertia { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 12px; }
+.inertia label { display: flex; flex-direction: column; gap: 2px; }
+.inertia .numcell { width: 100%; text-align: right; border-color: var(--line); }
 .dialog .muted { color: var(--muted); margin: 0 0 4px; }

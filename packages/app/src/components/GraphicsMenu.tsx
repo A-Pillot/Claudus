@@ -18,6 +18,8 @@ const COMPLIANCE_TOGGLES: [keyof GraphicsView, string][] = [
   ['showBushAxes', 'Bush local axes'],
   ['showForces', 'External forces'],
   ['showJointForces', 'Calculated joint forces'],
+  ['showCog', 'Part C of G markers'],
+  ['showCogAxes', 'Part C of G local axes'],
 ];
 
 /** SHARK's Graphics menu: add elements by picking points, delete the picked element, and display options. */

@@ -9,6 +9,7 @@ import { useTwoD } from '../twod/store2d';
 import { GraphicsMenu } from './GraphicsMenu';
 import { TransferMenu } from './TransferMenu';
 import { ComplianceMenus } from './ComplianceMenu';
+import { GraphsMenu } from './GraphsMenu';
 import { RideHeightMenu } from './RideHeightMenu';
 
 export function Toolbar({ analysis }: { analysis: AnalysisState }) {
@@ -58,6 +59,7 @@ export function Toolbar({ analysis }: { analysis: AnalysisState }) {
       {!two && <button onClick={exportSdf} disabled={!analysis.results || analysis.busy}>Export SDF</button>}
       {!two && <TemplateMenu onError={setError} />}
       {!two && <GraphicsMenu />}
+      {!two && <GraphsMenu results={analysis.results} busy={analysis.busy} />}
       {!two && <TransferMenu onError={setError} />}
       {!two && <ComplianceMenus />}
       {!two && <RideHeightMenu onError={setError} />}

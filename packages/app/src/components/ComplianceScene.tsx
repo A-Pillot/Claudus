@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Line } from '@react-three/drei';
 import * as THREE from 'three';
-import { add, bushAxes, forcesFor, resolveAxisRef, type ComplianceResult, type Corner, type Vec3 } from '@claudus/core';
+import { add, bushAxes, endCompliance, forcesFor, partMasses, resolveAxisRef, type ComplianceResult, type Corner, type CornerState, type Vec3 } from '@claudus/core';
 import { useApp } from '../store';
 import { useEffectiveCompliance } from '../derived';
 
@@ -99,6 +99,52 @@ export function ComplianceScene({ corner, points, detail }: { corner: Corner; po
         const k = JOINT_FORCE_MAX / maxForce;
         return <Arrow key={i} from={o} to={add(o, j.force.map((v) => v * k) as Vec3)} color="#c678dd" head={10} />;
       })}
+    </group>
+  );
+}
+
+const COG_RADIUS = 14; // mm
+const COG_AXIS_LEN = 90; // mm
+
+/** A two-colour sphere in alternating quadrants, the usual centre-of-gravity symbol. */
+function CogMarker({ at, part }: { at: Vec3; part: number }) {
+  return (
+    <group position={at} rotation={[Math.PI / 2, 0, 0]} name={`cog-${part}`}>
+      {[0, 1, 2, 3].map((k) => (
+        <mesh key={k}>
+          <sphereGeometry args={[COG_RADIUS, 14, 10, (k * Math.PI) / 2, Math.PI / 2]} />
+          <meshStandardMaterial color={k % 2 ? '#15181d' : '#3fbf5f'} side={THREE.DoubleSide} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+/** Each part's C of G marker and local axes (compliant mode only; toggled under Graphics). */
+export function CogScene({ corner, points }: { corner: Corner; points: Vec3[] }) {
+  const view = useApp((s) => s.view);
+  const comp = useEffectiveCompliance();
+  const end = corner.end;
+  const cogs = useMemo(() => {
+    if (!view.showCog && !view.showCogAxes) return [];
+    const data = endCompliance(comp, end);
+    const at = (no: number) => { const i = corner.mech.index.get(no); return i === undefined ? undefined : points[i]; };
+    return partMasses(corner, { points } as unknown as CornerState, data).map((m) => {
+      const given = data.masses?.find((x) => x.part === m.part);
+      const R = bushAxes(m.cog, given && resolveAxisRef(given.zAxis, m.cog, at), given && resolveAxisRef(given.xzPlane, m.cog, at));
+      return { part: m.part, cog: m.cog, R };
+    });
+  }, [view.showCog, view.showCogAxes, comp, end, corner, points]);
+  return (
+    <group>
+      {cogs.map((c) => (
+        <group key={c.part}>
+          {view.showCog && <CogMarker at={c.cog} part={c.part} />}
+          {view.showCogAxes && (['#e15759', '#59a14f', '#4e79a7'] as const).map((col, k) => (
+            <Line key={k} points={[c.cog, add(c.cog, c.R[k].map((v) => v * COG_AXIS_LEN) as Vec3)]} color={col} lineWidth={2} />
+          ))}
+        </group>
+      ))}
     </group>
   );
 }

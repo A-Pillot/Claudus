@@ -65,6 +65,11 @@ describe('optimiser', () => {
     if (done.type !== 'done') throw new Error('no result');
     expect(events[0].type).toBe('start');
     expect(events.some((e) => e.type === 'step')).toBe(true);
+    // Every step carries the parameter values reached, so a stopped run can be rebuilt.
+    const lastStep = [...events].reverse().find((e) => e.type === 'step');
+    if (lastStep?.type !== 'step') throw new Error('no step');
+    expect(lastStep.values).toHaveLength(2);
+    expect(lastStep.values).toEqual(done.parameters.map((p) => p.value));
     expect(done.sum.total).toBeLessThan(before * 0.01);
     expect(done.model.front!.points[idx(7)][2]).toBeCloseTo(base.front!.points[idx(7)][2], 5);
     expect(done.model.front!.points[idx(12)][2]).toBeCloseTo(base.front!.points[idx(12)][2], 5);

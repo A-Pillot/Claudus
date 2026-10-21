@@ -26,6 +26,18 @@ export interface ResolvedMass {
 
 export const DEFAULT_PART_MASS = 1; // kg, SHARK's default
 
+/** Each part's centroid (the mean of its joint points) at a kinematic state; index = part - 1. */
+export function partCentroids(c: Corner, st: CornerState): Vec3[] {
+  const t = c.template;
+  return t.parts.map((_, b) => {
+    const idx = t.points.map((p, i) => (p.part1 === b + 1 || p.part2 === b + 1 ? i : -1)).filter((i) => i >= 0);
+    return scale(idx.reduce<Vec3>((s, i) => add(s, st.points[i]), [0, 0, 0]), 1 / Math.max(1, idx.length));
+  });
+}
+
+/** Every part's mass, C of G and global inertia, without building the whole compliance model. */
+export const partMasses = (c: Corner, st: CornerState, data: EndCompliance): ResolvedMass[] => resolveMasses(c, st, data, partCentroids(c, st));
+
 function resolveRef(ref: AxisRef, origin: Vec3, byNo: (no: number) => Vec3 | undefined): Vec3 | undefined {
   if (ref.kind === 'point') return byNo(ref.point);
   if (ref.kind === 'rel') return add(origin, ref.v);
