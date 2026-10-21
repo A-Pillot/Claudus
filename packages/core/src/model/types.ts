@@ -1,4 +1,5 @@
 import type { Vec3 } from '../math/vec3.js';
+import type { Template } from '../template/types.js';
 
 /** General vehicle data (the SHARK "Parameters" data set). */
 export interface VehicleParams {
@@ -61,6 +62,11 @@ export interface Model {
   tyreWidths: number[];
   rollSolution: number;
   groups: PointGroup[];
+  /**
+   * Templates saved with the model (SHARK's Setup / Include User Templates In Data Files), so a model built
+   * on an edited or custom template opens anywhere.
+   */
+  templates?: Template[];
   /** Order of sections as read, so a written file keeps the same layout. */
   sectionOrder: string[];
   raw: RawSection[];

@@ -3,6 +3,8 @@ import { DatParseError, formatSdf, listTemplates, newModel, readDat, writeDat, t
 import type { AnalysisState } from '../derived';
 import { useApp } from '../store';
 import { files } from '../files';
+import { templatesForModel } from '../templates';
+import { TemplateMenu } from './TemplateMenu';
 
 export function Toolbar({ analysis }: { analysis: AnalysisState }) {
   const { model, fileName, dirty, end, setModel, setEnd, markSaved } = useApp();
@@ -20,7 +22,8 @@ export function Toolbar({ analysis }: { analysis: AnalysisState }) {
     }
   };
   const save = async () => {
-    const name = await files().save(fileName, writeDat(model));
+    // Custom templates the model uses travel inside the file, so it opens on any machine.
+    const name = await files().save(fileName, writeDat({ ...model, templates: templatesForModel(model) }));
     if (name) markSaved(name);
   };
   const exportSdf = async () => {
@@ -35,6 +38,7 @@ export function Toolbar({ analysis }: { analysis: AnalysisState }) {
       <button onClick={open}>Open…</button>
       <button onClick={save}>Save</button>
       <button onClick={exportSdf} disabled={!analysis.results || analysis.busy}>Export SDF</button>
+      <TemplateMenu onError={setError} />
       <span className="sep" />
       <div className="seg">
         {(['front', 'rear'] as End[]).map((e) => (

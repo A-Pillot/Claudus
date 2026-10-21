@@ -198,3 +198,17 @@ describe('Edit menu template tools', () => {
     wc(corner, a.points).forEach((v, k) => expect(wc(c, b.points)[k]).toBeCloseTo(v, 5));
   });
 });
+
+describe('converting a model to a full axle', () => {
+  it('mirrors the model points, not the template defaults', async () => {
+    const { convertPointsToAxle } = await import('../src/template/axle.js');
+    const t = getTemplate(1);
+    const pts = dataPoints(t).map((p) => [p.def[0] + 5, p.def[1] + 7, p.def[2]] as Vec3);
+    const out = convertPointsToAxle(t, pts, { slot: 31 });
+    expect(out.points).toHaveLength(28);
+    expect(out.points[14]).toEqual([pts[0][0], -pts[0][1], pts[0][2]]);
+    const c = new Corner({ templateSlot: 31, points: out.points, rollingRadius: 225 }, 'front', out.template);
+    const st = solveAxle(c, { bump: 10 });
+    expect(st.geometryLeft.camber).toBeCloseTo(st.geometryRight.camber, 6);
+  });
+});
