@@ -52,6 +52,20 @@ interface Element {
   point: number;
   bushed: boolean;
   report: boolean;
+  /** Damping loss angle, deg (bushes only). */
+  loss?: number;
+}
+
+/** A damper: an axial dashpot between two bodies. */
+export interface DamperElement {
+  a: number;
+  pa: Vec3;
+  b: number;
+  pb: Vec3;
+  /** Unit vector along the damper. */
+  u: Vec3;
+  /** Rate, N.s/mm. */
+  c: number;
 }
 
 const I3: M3 = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
@@ -88,8 +102,31 @@ export interface ComplianceOptions {
   includeSpring?: boolean;
 }
 
-/** Solve the compliant deflection of a corner (or full axle) at a kinematic state. */
-export function solveCompliance(c: Corner, st: CornerState, data: EndCompliance, opts: ComplianceOptions): ComplianceResult {
+/**
+ * The linear model of a corner at a kinematic state: stiffness matrix, load vector and the elements behind
+ * them. Bodies are the template's parts (index = part - 1), each with six motions about its centroid.
+ */
+export interface ComplianceModel {
+  n: number;
+  K: number[][];
+  F: number[];
+  /** Structural (hysteretic) damping matrix: each bush's stiffness times tan(loss angle). */
+  Kloss: number[][];
+  /** Viscous damping matrix from the dampers, N.s/mm. */
+  C: number[][];
+  centroid: Vec3[];
+  elements: Element[];
+  dampers: DamperElement[];
+  wheelBodies: number[];
+  springForces: [number, number];
+  /** Body index for a part number (-1 for ground). */
+  body: (part: number) => number;
+  /** Rows mapping a body's six motions to a point's displacement. */
+  G: (b: number, p: Vec3) => number[][];
+}
+
+/** Build the linear compliance model of a corner (or full axle) at a kinematic state. */
+export function buildCompliance(c: Corner, st: CornerState, data: EndCompliance, opts: ComplianceOptions): ComplianceModel {
   const t = c.template;
   const pts = st.points;
   const nParts = t.parts.length;
@@ -120,7 +157,7 @@ export function solveCompliance(c: Corner, st: CornerState, data: EndCompliance,
   };
 
   /** Add a 6-component spring between bodies a and b at a point. */
-  const addSpring = (e: Element) => {
+  const addSpring = (e: Element, M = K, f = 1) => {
     const Kt = [0, 1, 2].map((i) => [0, 1, 2].map((j) => e.R[0][i] * e.R[0][j] * e.kt[0] + e.R[1][i] * e.R[1][j] * e.kt[1] + e.R[2][i] * e.R[2][j] * e.kt[2]));
     const Kr = [0, 1, 2].map((i) => [0, 1, 2].map((j) => e.R[0][i] * e.R[0][j] * e.kr[0] + e.R[1][i] * e.R[1][j] * e.kr[1] + e.R[2][i] * e.R[2][j] * e.kr[2]));
     // Relative translation d = G_a q_a - G_b q_b; relative rotation w = q_a(rot) - q_b(rot).
@@ -137,13 +174,13 @@ export function solveCompliance(c: Corner, st: CornerState, data: EndCompliance,
             let v = 0;
             for (let a = 0; a < 3; a++) for (let b = 0; b < 3; b++) v += Gp[a][i] * Kt[a][b] * Gq[b][j];
             if (i >= 3 && j >= 3) v += Kr[i - 3][j - 3];
-            K[6 * P.body + i][6 * Q.body + j] += sgn * v;
+            M[6 * P.body + i][6 * Q.body + j] += f * sgn * v;
           }
       }
   };
 
   /** An axial spring of rate k along unit vector u between a point on body a and a point on body b. */
-  const addAxial = (a: number, pa: Vec3, b: number, pb: Vec3, u: Vec3, k: number) => {
+  const addAxial = (a: number, pa: Vec3, b: number, pb: Vec3, u: Vec3, k: number, M = K) => {
     const row = new Array(n).fill(0);
     const put = (bd: number, p: Vec3, sign: number) => {
       if (bd < 0) return;
@@ -153,7 +190,7 @@ export function solveCompliance(c: Corner, st: CornerState, data: EndCompliance,
     put(a, pa, 1);
     put(b, pb, -1);
     const nz = row.map((v, i) => (v !== 0 ? i : -1)).filter((i) => i >= 0);
-    for (const i of nz) for (const j of nz) K[i][j] += k * row[i] * row[j];
+    for (const i of nz) for (const j of nz) M[i][j] += k * row[i] * row[j];
   };
 
   /** Apply a force at a point on a body. */
@@ -194,7 +231,7 @@ export function solveCompliance(c: Corner, st: CornerState, data: EndCompliance,
     if (!bush && fixedSide(p.part1) && fixedSide(p.part2)) kr = [rot, rot, rot];
     // SHARK holds a rigid axle's centre revolute with a stiff rotational bush.
     if (hasGen(p, GenType.RigidAxleRevolute)) kr = [s.rigidRotation * perDeg, s.rigidRotation * perDeg, s.rigidRotation * perDeg];
-    elements.push({ a: body(p.part1), b: body(p.part2), at, R, kt, kr, point: p.no, bushed: !!bush, report: !p.dummy });
+    elements.push({ a: body(p.part1), b: body(p.part2), at, R, kt, kr, point: p.no, bushed: !!bush, report: !p.dummy, loss: bush ? bush.lossAngle ?? s.lossAngle : undefined });
   });
 
   // Roll bar: its two halves are joined by a torsion spring about the bar axis.
@@ -269,7 +306,26 @@ export function solveCompliance(c: Corner, st: CornerState, data: EndCompliance,
     }
   });
 
-  for (const e of elements) addSpring(e);
+  // Dampers: axial dashpots between their two ends.
+  const dampers: DamperElement[] = [];
+  const damperPairs: [GenType, GenType][] = [[GenType.Damper1ToSuspension, GenType.Damper1ToBody], [GenType.Damper2ToSuspension, GenType.Damper2ToBody]];
+  damperPairs.forEach(([sg, bg], k) => {
+    const sp = findGen(t, sg);
+    const bp = findGen(t, bg);
+    if (!sp || !bp || !data.dampers[k]) return;
+    const [si, bi] = [sp, bp].map((q) => c.mech.index.get(q.no)!);
+    const a = body(sp.part1 === GROUND ? sp.part2 : sp.part1);
+    const b = body(bp.part1 === GROUND ? bp.part2 : bp.part1);
+    dampers.push({ a, pa: pts[si], b: b === a ? -1 : b, pb: pts[bi], u: normalize(sub(pts[si], pts[bi])), c: data.dampers[k] });
+  });
+  const C = Array.from({ length: n }, () => new Array(n).fill(0));
+  for (const d of dampers) addAxial(d.a, d.pa, d.b, d.pb, d.u, d.c, C);
+
+  const Kloss = Array.from({ length: n }, () => new Array(n).fill(0));
+  for (const e of elements) {
+    addSpring(e);
+    if (e.loss) addSpring(e, Kloss, Math.tan(rad(e.loss)));
+  }
 
   for (const f of opts.forces ?? []) {
     if (!f.on || !f.magnitude) continue;
@@ -284,6 +340,27 @@ export function solveCompliance(c: Corner, st: CornerState, data: EndCompliance,
 
   // Parts with no stiffness at all (none in a valid template) would make K singular; give them a tiny one.
   for (let i = 0; i < n; i++) if (Math.abs(K[i][i]) < 1e-9) K[i][i] = 1e-6;
+  return { n, K, F, Kloss, C, centroid, elements, dampers, wheelBodies, springForces, body, G };
+}
+
+/** Displacement of a point on a body for a motion vector q. */
+export function pointMotion(m: ComplianceModel, q: number[], b: number, p: Vec3): Vec3 {
+  if (b < 0) return [0, 0, 0];
+  const r = sub(p, m.centroid[b]);
+  const o = 6 * b;
+  return add([q[o], q[o + 1], q[o + 2]], cross([q[o + 3], q[o + 4], q[o + 5]], r));
+}
+
+/** The body a template point moves with. */
+export const pointBody = (m: ComplianceModel, part1: number, part2: number) => m.body(part1 === GROUND ? part2 : part1);
+
+/** Solve the compliant deflection of a corner (or full axle) at a kinematic state. */
+export function solveCompliance(c: Corner, st: CornerState, data: EndCompliance, opts: ComplianceOptions): ComplianceResult {
+  const model = buildCompliance(c, st, data, opts);
+  const { n, K, F, centroid, elements, wheelBodies, springForces, body } = model;
+  const t = c.template;
+  const pts = st.points;
+  const nParts = t.parts.length;
   const q = solveLinear(K, F) ?? new Array(n).fill(0);
   const motion = (b: number) => (b < 0 ? [0, 0, 0, 0, 0, 0] : q.slice(6 * b, 6 * b + 6));
   const move = (b: number, p: Vec3): Vec3 => {
