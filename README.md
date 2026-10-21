@@ -41,6 +41,14 @@ SHARK `.dat` model files, solves the suspension kinematics, and lists the same s
 - **Files:** New (from any template), Open and Save for `.dat` files.
 - **Desktop:** a Tauri desktop app with native file dialogs.
 
+**Phase 6, hard point utilities**
+- **Import / Export:** hard points move in and out of Adams subsystem (`.sub`) files and a plain "User A" text
+  format, matched by each template point's label strings (editable; formulas like `[(P1+P2)/2.0]` and `DERIVED`
+  work). Shift, scale and axis switch are applied as SHARK does. Export rewrites only the matched numbers of an
+  existing file. A preview shows every match before anything is applied.
+- **Groups:** create, edit, delete and joggle point groups (stored in the `.dat` GROUPS section), plus saved point
+  sets (Data / Coordinates) and Add End from File.
+
 Next up:
 - The template editor (with the Edit menu template tools) and the 2D module.
 - Compliance, including type 29 (twist beam), which needs it to move at all.

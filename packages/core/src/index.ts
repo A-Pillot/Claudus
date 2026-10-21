@@ -14,3 +14,8 @@ export * from './solver/corner.js';
 export * from './results/derivatives.js';
 export * from './results/sdf.js';
 export * from './model/new.js';
+export * from './io/hpFormat.js';
+export * from './io/hpMath.js';
+export * from './io/hardpoints.js';
+export * from './model/groups.js';
+export * from './model/coordSets.js';
