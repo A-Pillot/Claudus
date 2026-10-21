@@ -51,9 +51,15 @@ SHARK `.dat` model files, solves the suspension kinematics, and lists the same s
 - **Free modes:** release one hard point (Solve / 2D Fix Option) and fit its position to the user lines.
 - **Convert 2D to 3D:** fills a double wishbone or strut template from the 2D data.
 - **View:** an SVG cross-car view with draggable points, construction lines and graphs with the targets overlaid.
+**Phase 6, hard point utilities**
+- **Import / Export:** hard points move in and out of Adams subsystem (`.sub`) files and a plain "User A" text
+  format, matched by each template point's label strings (editable; formulas like `[(P1+P2)/2.0]` and `DERIVED`
+  work). Shift, scale and axis switch are applied as SHARK does. Export rewrites only the matched numbers of an
+  existing file. A preview shows every match before anything is applied.
+- **Groups:** create, edit, delete and joggle point groups (stored in the `.dat` GROUPS section), plus saved point
+  sets (Data / Coordinates) and Add End from File.
 
 Next up:
-- The template editor (with the Edit menu template tools).
 - Compliance, including type 29 (twist beam), which needs it to move at all.
 - Modal analysis, the forced-damped response and the optimiser.
 

@@ -1,0 +1,28 @@
+$---------------------------------------------------------------------MDI_HEADER
+[MDI_HEADER]
+ FILE_TYPE     =  'sub'
+ FILE_VERSION  =  13.7
+ FILE_FORMAT   =  'ASCII'
+ HEADER_SIZE   =  80
+$---------------------------------------------------------------------HARDPOINT
+[HARDPOINT]
+{symmetry  hpt_name          x_value     y_value     z_value}
+'left'     'lca_front'      3800.0      -313.0       225.6
+'right'    'lca_front'      3800.0       313.0       225.6
+'left'     'lca_rear'       4100.0      -300.0       230.0
+'right'    'lca_rear'       4100.0       300.0       230.0
+'right'    'lca_outer'      3950.0       700.0       260.0
+'right'    'uca_front'      3850.0       400.0       470.0
+'right'    'uca_rear'       4050.0       400.0       470.0
+'right'    'uca_outer'      3960.0       650.0       500.0
+'right'    'strut_lower'    3950.0       600.0       280.0
+'right'    'strut_upper'    3960.0       450.0       700.0
+'right'    'tierod_inner'   3750.0       250.0       300.0
+'right'    'tierod_outer'   3760.0       690.0       310.0
+'right'    'wheel_center'   3950.0       740.0       225.0
+'single'   'steering_rack'  3750.0         0.0       300.0
+$---------------------------------------------------------------------MARKER
+[MARKER]
+{marker_name     x      y      z}
+'not_a_hardpoint'  1.0  2.0  3.0
+$------------------------------------------------------------------------END

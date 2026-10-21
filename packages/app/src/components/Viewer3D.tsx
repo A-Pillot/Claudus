@@ -1,13 +1,13 @@
 import { useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { Line, OrbitControls, GizmoHelper, GizmoViewport } from '@react-three/drei';
+import { Html, Line, OrbitControls, GizmoHelper, GizmoViewport } from '@react-three/drei';
 import * as THREE from 'three';
 import { GenType, GROUND, findGen, mirrorY, type AxleState, type Corner, type Vec3 } from '@claudus/core';
 import { useApp } from '../store';
+import { pickPoint } from '../graphicsActions';
+import { GraphicElements } from './GraphicShapes';
 
 const MM = 0.001; // scene units are metres
-
-const PART_COLOURS = ['#4e79a7', '#f28e2b', '#59a14f', '#b07aa1', '#76b7b2', '#edc948', '#9c755f', '#e15759'];
 
 interface Props {
   corner: Corner;
@@ -15,6 +15,7 @@ interface Props {
 }
 
 export function Viewer3D({ corner, state }: Props) {
+  const view = useApp((s) => s.view);
   const wc = corner.mech.staticPoints[corner.mech.wheelCentre];
   // Centre the scene on the axle so the camera orbits around the car's centreline at this end.
   const origin: Vec3 = [wc[0], 0, corner.z0];
@@ -22,7 +23,7 @@ export function Viewer3D({ corner, state }: Props) {
     <Canvas
       camera={{ position: [-1.6, -1.4, 0.9], up: [0, 0, 1], fov: 40, near: 0.01, far: 100 }}
       onCreated={({ camera }) => camera.lookAt(0, 0, 0.25)}
-      onPointerMissed={() => useApp.getState().select(null)}
+      onPointerMissed={() => { const s = useApp.getState(); s.select(null); if (!s.addMode) s.selectGraphic(null); }}
     >
       <color attach="background" args={['#14171c']} />
       <ambientLight intensity={0.7} />
@@ -30,9 +31,10 @@ export function Viewer3D({ corner, state }: Props) {
       <group position={[-origin[0] * MM, 0, -origin[2] * MM]} scale={MM}>
         <Side corner={corner} points={state.right.points} mirrored={false} />
         {/* A corner model's left side is drawn as the mirror image; a full-axle template already has both. */}
-        {state.leftMirror && <Side corner={corner} points={state.leftMirror.points.map(mirrorY)} mirrored />}
+        {state.leftMirror && view.bothSides && <Side corner={corner} points={state.leftMirror.points.map(mirrorY)} mirrored />}
         <Ground z={state.right.groundZ} x={wc[0]} />
         <RollCentre rc={state.rollCentre} />
+        {view.triad && <axesHelper args={[300]} />}
       </group>
       <OrbitControls makeDefault target={[0, 0, 0.25]} />
       <GizmoHelper alignment="bottom-right" margin={[60, 60]}>
@@ -48,15 +50,9 @@ function Side({ corner, points, mirrored }: { corner: Corner; points: Vec3[]; mi
   const select = useApp((s) => s.select);
   const tyreWidths = useApp((s) => s.model.tyreWidths);
   const idx = (no: number) => corner.mech.index.get(no)!;
+  const view = useApp((s) => s.view);
+  const addMode = useApp((s) => s.addMode);
   const p = (no: number) => points[idx(no)];
-
-  // Colour each drawn element by the part all its points share.
-  const partOf = (nos: number[]) => {
-    for (let k = 1; k <= t.parts.length; k++) {
-      if (nos.every((no) => { const tp = t.points[idx(no)]; return tp.part1 === k || tp.part2 === k; })) return k;
-    }
-    return 0;
-  };
 
   const pairs = (a: GenType, b: GenType) => [findGen(t, a), findGen(t, b)];
   const springs = [pairs(GenType.Spring1ToSuspension, GenType.Spring1ToBody), pairs(GenType.Spring2ToSuspension, GenType.Spring2ToBody)];
@@ -66,18 +62,7 @@ function Side({ corner, points, mirrored }: { corner: Corner; points: Vec3[]; mi
 
   return (
     <group>
-      {t.graphics.map((g, i) => {
-        if (g.kind !== 'line' && g.kind !== 'tube') return null;
-        const part = partOf(g.points);
-        return (
-          <Line
-            key={i}
-            points={g.points.map(p)}
-            color={PART_COLOURS[(part - 1 + PART_COLOURS.length) % PART_COLOURS.length]}
-            lineWidth={g.kind === 'tube' ? 4 : 2.5}
-          />
-        );
-      })}
+      <GraphicElements corner={corner} points={points} interactive={!mirrored} />
       {dampers.map(([a, b], k) => a && b && <Line key={`d${k}`} points={[p(a.no), p(b.no)]} color="#ff9d4d" lineWidth={7} />)}
       {springs.map(([a, b], k) => a && b && <Line key={`s${k}`} points={[p(a.no), p(b.no)]} color="#a5e887" lineWidth={2} dashed dashSize={12} gapSize={6} />)}
       {corner.sides.map((w, k) => (
@@ -87,14 +72,23 @@ function Side({ corner, points, mirrored }: { corner: Corner; points: Vec3[]; mi
         if (tp.dummy) return null;
         const isGround = tp.part1 === GROUND || tp.part2 === GROUND;
         const sel = !mirrored && selected === i;
+        const picking = !mirrored && addMode?.picked.includes(tp.no);
         return (
           <mesh
             key={tp.no}
             position={points[i]}
-            onClick={mirrored ? undefined : (e) => { e.stopPropagation(); select(i); }}
+            onClick={mirrored ? undefined : (e) => { e.stopPropagation(); if (useApp.getState().addMode) pickPoint(tp.no); else select(i); }}
           >
             {isGround ? <boxGeometry args={[14, 14, 14]} /> : <sphereGeometry args={[sel ? 11 : 7, 16, 12]} />}
-            <meshStandardMaterial color={sel ? '#ffe066' : isGround ? '#9aa4b2' : '#dfe6ee'} />
+            <meshStandardMaterial color={sel ? '#ffe066' : picking ? '#ff8a3d' : isGround ? '#9aa4b2' : '#dfe6ee'} />
+            {!mirrored && (view.pointNos || view.pointValues) && (
+              <Html center={false} zIndexRange={[5, 0]} style={{ pointerEvents: 'none', transform: 'translate(8px, -14px)' }}>
+                <div className="plabel">
+                  {view.pointNos && <b>{tp.no}</b>}
+                  {view.pointValues && <span> {points[i].map((v) => v.toFixed(1)).join(', ')}</span>}
+                </div>
+              </Html>
+            )}
           </mesh>
         );
       })}

@@ -2,10 +2,13 @@
  * Suspension derivatives, following SHARK's definitions (SAE J670e plus Lotus conventions).
  * All values are for the right-hand (+Y) corner; signs follow the SHARK help "Theory" topic.
  */
+import { makeCompliant } from '../compliance/apply.js';
+import { defaultCompliance } from '../compliance/types.js';
 import { deg, mirrorY, sub, type Vec3 } from '../math/vec3.js';
 import type { Model, VehicleParams } from '../model/types.js';
 import { Corner, intersectYZ, type CornerRates, type CornerState } from '../solver/corner.js';
 import { spindleAxis } from '../solver/mechanism.js';
+import { isMeasure, measureValues } from '../graphics/elements.js';
 
 export interface WheelGeometry {
   camber: number; // deg, + top outward
@@ -69,6 +72,8 @@ export function wheelGeometry(c: Corner, points: Vec3[], groundZ: number, state?
 }
 
 export interface BumpRow extends WheelGeometry {
+  /** Values of the template's measurement elements (distance, components, angle), keyed as `measureColumns`. */
+  measures?: Record<string, number>;
   bump: number;
   damperRatio: number;
   springRatio: number;
@@ -83,6 +88,8 @@ export interface BumpRow extends WheelGeometry {
 }
 
 export interface RollRow extends WheelGeometry {
+  /** Values of the template's measurement elements (distance, components, angle), keyed as `measureColumns`. */
+  measures?: Record<string, number>;
   roll: number;
   damperRatio: number;
   springRatio: number;
@@ -94,6 +101,8 @@ export interface RollRow extends WheelGeometry {
 }
 
 export interface SteerRow {
+  /** Measurement element values for the right wheel at this rack position. */
+  measures?: Record<string, number>;
   rack: number;
   toeInner: number;
   toeOuter: number;
@@ -104,6 +113,15 @@ export interface SteerRow {
   steerOuter: number;
   ackermann: number; // %
   turningRadius: number; // mm, to the outer front contact point
+}
+
+/** Measurement element values at solved point positions; undefined when the template has none. */
+function measuresAt(c: Corner, points: Vec3[]): Record<string, number> | undefined {
+  if (!c.template.graphics.some(isMeasure)) return undefined;
+  return measureValues(c.template, (no) => {
+    const i = c.mech.index.get(no);
+    return i === undefined ? undefined : points[i];
+  });
 }
 
 const ratio = (dz: number, dl: number) => (Math.abs(dl) > 1e-12 ? Math.abs(dz / dl) : NaN);
@@ -168,6 +186,7 @@ export function bumpSweep(c: Corner, p: VehicleParams, values = range(-p.rebound
     return {
       bump: st.articulation.bump,
       ...g,
+      measures: measuresAt(c, st.points),
       damperRatio: ratio(r.tcp[2], r.damperLength),
       springRatio: ratio(r.tcp[2], r.springLength),
       antiDive: antiPitch(c, r, p, 'dive'),
@@ -197,6 +216,7 @@ export function rollSweep(c: Corner, p: VehicleParams, values = range(-p.rollAng
       return {
         roll: st.articulation.roll,
         ...g,
+        measures: measuresAt(c, st.points),
         damperRatio: ratio(r.tcp[2], r.damperLength),
         springRatio: ratio(r.tcp[2], r.springLength),
         rollCentre: [(c.tcp(st.points, 0)[0] + c.tcp(st.points, 1)[0]) / 2, y, z - c.z0],
@@ -222,6 +242,7 @@ export function rollSweep(c: Corner, p: VehicleParams, values = range(-p.rollAng
     return {
       roll: v,
       ...g,
+      measures: measuresAt(c, st.points),
       damperRatio: ratio(r.tcp[2], r.damperLength),
       springRatio: ratio(r.tcp[2], r.springLength),
       rollCentre: [(tr[0] + tl[0]) / 2, y, z - c.z0],
@@ -239,6 +260,7 @@ export function steerSweep(c: Corner, p: VehicleParams, values = range(-p.steerT
   // Right wheel at each rack position, and the left wheel in right-hand convention.
   const pairs = sweep(all, (v, w) => c.solve({ rack: v }, w), (st) => ({
     right: wheelGeometry(c, st.points, st.groundZ, st),
+    measures: measuresAt(c, st.points),
     left: c.fullAxle ? wheelGeometry(c, st.points, st.drive.groundZ2 ?? st.groundZ, st, 1) : undefined,
   }));
   const geo = new Map([...pairs].map(([v, p]) => [v, p.right]));
@@ -268,6 +290,7 @@ export function steerSweep(c: Corner, p: VehicleParams, values = range(-p.steerT
     }
     return {
       rack: v,
+      measures: pairs.get(v)!.measures,
       toeInner: inner.toeSae,
       toeOuter: outer.toeSae,
       camberInner: inner.camber,
@@ -300,12 +323,21 @@ export interface EndAnalysis {
 }
 
 /** Run the standard SHARK analysis (statics, bump, roll and steer sweeps) for every end of a model. */
-export function analyse(m: Model): EndAnalysis[] {
+export interface AnalyseOptions {
+  /**
+   * Run the analysis in compliant mode: every position is deflected under the spring preload and the active
+   * force set, using the model's compliance data (or the defaults when it has none).
+   */
+  compliant?: boolean;
+}
+
+export function analyse(m: Model, opts: AnalyseOptions = {}): EndAnalysis[] {
   const out: EndAnalysis[] = [];
   for (const end of ['front', 'rear'] as const) {
     const data = m[end];
     if (!data) continue;
     const corner = new Corner(data, end);
+    if (opts.compliant) makeCompliant(corner, m.compliance ?? defaultCompliance());
     out.push({
       end,
       corner,

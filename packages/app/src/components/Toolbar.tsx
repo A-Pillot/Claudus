@@ -6,6 +6,8 @@ import { files } from '../files';
 import { templatesForModel } from '../templates';
 import { TemplateMenu } from './TemplateMenu';
 import { useTwoD } from '../twod/store2d';
+import { GraphicsMenu } from './GraphicsMenu';
+import { TransferMenu } from './TransferMenu';
 
 export function Toolbar({ analysis }: { analysis: AnalysisState }) {
   const { model, fileName, dirty, end, setModel, setEnd, markSaved } = useApp();
@@ -53,6 +55,8 @@ export function Toolbar({ analysis }: { analysis: AnalysisState }) {
       <button onClick={save}>Save</button>
       {!two && <button onClick={exportSdf} disabled={!analysis.results || analysis.busy}>Export SDF</button>}
       {!two && <TemplateMenu onError={setError} />}
+      {!two && <GraphicsMenu />}
+      {!two && <TransferMenu onError={setError} />}
       <span className="sep" />
       {/* SHARK keeps separate 2D and 3D data; this switches between the two. */}
       <div className="seg" title="Module">

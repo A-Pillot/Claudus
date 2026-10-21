@@ -1,3 +1,4 @@
+import type { ComplianceData } from '../compliance/types.js';
 import type { Vec3 } from '../math/vec3.js';
 import type { Template } from '../template/types.js';
 
@@ -67,6 +68,8 @@ export interface Model {
    * on an edited or custom template opens anywhere.
    */
   templates?: Template[];
+  /** Bushes, springs, dampers and force sets for compliant analysis (SHARK's COMPLIANCE section and Claudus extras). */
+  compliance?: ComplianceData;
   /** Order of sections as read, so a written file keeps the same layout. */
   sectionOrder: string[];
   raw: RawSection[];

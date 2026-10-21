@@ -8,12 +8,14 @@ import { Viewer3D } from './components/Viewer3D';
 import { ArticulationBar } from './components/ArticulationBar';
 import { Readouts } from './components/Readouts';
 import { Graphs } from './components/Graphs';
+import { AddBanner } from './components/GraphicsMenu';
+import { GroupsPanel } from './components/GroupsPanel';
 import { SdfView } from './components/SdfView';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { TwoDApp } from './twod/TwoDApp';
 import { useTwoD } from './twod/store2d';
 
-type SideTab = 'points' | 'params';
+type SideTab = 'points' | 'params' | 'groups';
 type BottomTab = 'graphs' | 'sdf';
 
 export function App() {
@@ -41,13 +43,14 @@ export function App() {
     <div className="app">
       <Toolbar analysis={analysis} />
       <aside className="side">
-        <Tabs value={side} onChange={setSide} tabs={[['points', 'Hard points'], ['params', 'General data']]} />
-        <div className="scroll">{side === 'points' ? <PointTable /> : <ParamsPanel />}</div>
+        <Tabs value={side} onChange={setSide} tabs={[['points', 'Hard points'], ['params', 'General data'], ['groups', 'Groups']]} />
+        <div className="scroll">{side === 'points' ? <PointTable /> : side === 'params' ? <ParamsPanel /> : <GroupsPanel />}</div>
       </aside>
       <main className="view">
         {corner && state ? (
           <>
             <ErrorBoundary resetKey={revision}><Viewer3D corner={corner} state={state} /></ErrorBoundary>
+            <AddBanner />
             {label && <div className="overlay">Point {label.no}: {label.label}</div>}
             {!state.right.converged && <div className="overlay warn">The suspension cannot reach this position.</div>}
           </>

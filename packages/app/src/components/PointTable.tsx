@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { dataPoints, getTemplate, GROUND, hasTemplate } from '@claudus/core';
 import { useApp } from '../store';
+import { pickPoint } from '../graphicsActions';
 
 /** A number input that only commits on Enter or blur, so half-typed values never reach the solver. */
 export function NumberCell({ value, onCommit, digits = 3 }: { value: number; onCommit: (v: number) => void; digits?: number }) {
@@ -62,7 +63,7 @@ export function PointTable() {
               key={tp.no}
               ref={(el) => { rowRefs.current[i] = el; }}
               className={selected === i ? 'sel' : ''}
-              onClick={() => select(i)}
+              onClick={() => (useApp.getState().addMode ? pickPoint(tp.no) : select(i))}
             >
               <td className="no">{tp.no}</td>
               <td className="label" title={tp.label}>

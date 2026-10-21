@@ -89,6 +89,20 @@ export class Corner {
     this.rollAxisZ = Number.isFinite(rc) ? rc : this.z0;
   }
 
+  /**
+   * Optional deformation applied after every kinematic solve, such as the compliant deflection under
+   * spring and external loads. Derivatives are then measured on the deformed geometry.
+   */
+  deform?: (kinematic: CornerState) => Vec3[];
+
+  /** Kinematic solve for a drive, followed by the deformation when one is set. */
+  solveDrive(drive: Drive, warm?: number[]): { points: Vec3[]; x: number[]; converged: boolean } {
+    const res = this.mech.solve(drive, warm);
+    if (!this.deform) return res;
+    const st: CornerState = { articulation: { bump: 0, roll: 0, rack: drive.rack ?? 0 }, points: res.points, groundZ: drive.groundZ, x: res.x, drive, converged: res.converged };
+    return { ...res, points: this.deform(st) };
+  }
+
   /** True when the template has both wheels of the axle. */
   get fullAxle(): boolean {
     return this.sides.length > 1;
@@ -112,7 +126,7 @@ export class Corner {
   solve(a: Articulation, warm?: number[]): CornerState {
     const art = { bump: a.bump ?? 0, roll: a.roll ?? 0, rack: a.rack ?? 0 };
     const drive = this.driveFor(art);
-    const res = this.mech.solve(drive, warm);
+    const res = this.solveDrive(drive, warm);
     return { articulation: art, points: res.points, groundZ: drive.groundZ, x: res.x, drive, converged: res.converged };
   }
 
@@ -143,8 +157,8 @@ export class Corner {
    */
   wheelRates(st: CornerState, sign: 1 | -1 = 1, h = 0.05): CornerRates[] {
     const g2 = st.drive.groundZ2 ?? st.groundZ;
-    const up = this.mech.solve({ ...st.drive, groundZ: st.groundZ + h, groundZ2: g2 + sign * h }, st.x);
-    const dn = this.mech.solve({ ...st.drive, groundZ: st.groundZ - h, groundZ2: g2 - sign * h }, st.x);
+    const up = this.solveDrive({ ...st.drive, groundZ: st.groundZ + h, groundZ2: g2 + sign * h }, st.x);
+    const dn = this.solveDrive({ ...st.drive, groundZ: st.groundZ - h, groundZ2: g2 - sign * h }, st.x);
     return this.sides.map((_, k) => {
       // per mm of this wheel's own travel
       const s = (k === 0 ? 1 : sign) / (2 * h);
@@ -205,8 +219,8 @@ export class Corner {
     const body = this.mech.bodies.find((b) => b.local.has(wc));
     if (!body) return undefined;
     const rack = st.drive.rack ?? 0;
-    const a = this.mech.solve({ ...st.drive, rack: rack + h }, st.x);
-    const b = this.mech.solve({ ...st.drive, rack: rack - h }, st.x);
+    const a = this.solveDrive({ ...st.drive, rack: rack + h }, st.x);
+    const b = this.solveDrive({ ...st.drive, rack: rack - h }, st.x);
     const idx = [...body.local.keys()];
     const p = idx.map((i) => st.points[i]);
     const v = idx.map((i) => sub(a.points[i], b.points[i]).map((d) => d / (2 * h)) as Vec3);
