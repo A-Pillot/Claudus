@@ -41,3 +41,39 @@ describe('undo and redo', () => {
     useApp.getState().setUndoLimit(50);
   });
 });
+
+describe('undo across a template edit', () => {
+  it('puts the template back with the points', async () => {
+    const { addPointNow, useDataUi } = await import('./dataUi');
+    const { dataPoints, getTemplate } = await import('@claudus/core');
+    useApp.getState().setModel(newModel(1, 'front'), 'a.dat');
+    useDataUi.getState().setAdd({ what: 'point', mode: 'abs', label: 'P1', abs: [10, 20, 30] });
+    addPointNow(useDataUi.getState().add); // built-in 1 becomes a custom template
+    addPointNow({ ...useDataUi.getState().add, label: 'P2' }); // the custom template is edited in place
+    const count = () => {
+      const d = useApp.getState().model.front!;
+      return [d.points.length, dataPoints(getTemplate(d.templateSlot)).length];
+    };
+    const [n2] = count();
+    useApp.getState().undo();
+    expect(count()).toEqual([n2 - 1, n2 - 1]);
+    useApp.getState().undo();
+    expect(count()).toEqual([n2 - 2, n2 - 2]);
+    useApp.getState().redo();
+    useApp.getState().redo();
+    expect(count()).toEqual([n2, n2]);
+  });
+});
+
+describe('temporary group', () => {
+  it('is dropped when another model is opened or the end changes', async () => {
+    const { useEdit } = await import('./editing');
+    useApp.getState().setModel(newModel(1, 'front'), 'a.dat');
+    useEdit.getState().setTempGroup([2, 3]);
+    useApp.getState().setModel(newModel(1, 'front'), 'b.dat');
+    expect(useEdit.getState().tempGroup).toEqual([]);
+    useEdit.getState().setTempGroup([2, 3]);
+    useApp.getState().setEnd('rear');
+    expect(useEdit.getState().tempGroup).toEqual([]);
+  });
+});

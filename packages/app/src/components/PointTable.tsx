@@ -16,8 +16,11 @@ export function NumberCell({ value, onCommit, digits = 3, unit, placeholder }: {
   const [text, setText] = useState(shown);
   const [editing, setEditing] = useState(false);
   useEffect(() => { if (!editing) setText(shown); }, [shown, editing]);
+  // Escape blurs the box, which would commit the typed text: this tells the blur to throw it away.
+  const cancelled = useRef(false);
   const commit = () => {
     setEditing(false);
+    if (cancelled.current) { cancelled.current = false; setText(shown); return; }
     const typed = Number(text);
     const v = unit ? fromDisplayUnit(unit, typed) : typed;
     if (text.trim() !== '' && text !== shown && Number.isFinite(v) && v !== value) onCommit(v);
@@ -34,7 +37,7 @@ export function NumberCell({ value, onCommit, digits = 3, unit, placeholder }: {
       onBlur={commit}
       onKeyDown={(e) => {
         if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-        if (e.key === 'Escape') { setText(shown); setEditing(false); (e.target as HTMLInputElement).blur(); }
+        if (e.key === 'Escape') { cancelled.current = true; setText(shown); setEditing(false); (e.target as HTMLInputElement).blur(); }
       }}
     />
   );

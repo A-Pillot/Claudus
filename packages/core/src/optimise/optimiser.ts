@@ -116,16 +116,18 @@ export interface OptimiserProblem {
  */
 export function* optimise(problem: OptimiserProblem): Generator<OptimiserEvent, void, void> {
   const settings = problem.settings ?? defaultOptimiserSettings();
+  let model = problem.model;
+  const first = kinematicSum(model, problem.targets, problem.lines, problem.sumOptions);
   const sumOf = (m: Model) => {
     try {
-      const s = kinematicSum(m, problem.targets, problem.lines, problem.sumOptions).total;
-      return Number.isFinite(s) ? s : Infinity;
+      const k = kinematicSum(m, problem.targets, problem.lines, problem.sumOptions);
+      // A trial that loses sweep positions the start could solve has fewer rows to deviate: never better.
+      if (k.unsolved > first.unsolved) return Infinity;
+      return Number.isFinite(k.total) ? k.total : Infinity;
     } catch {
       return Infinity;
     }
   };
-  let model = problem.model;
-  const first = kinematicSum(model, problem.targets, problem.lines, problem.sumOptions);
   yield { type: 'start', sum: first };
   let sum = first.total;
   const states: ParameterState[] = problem.parameters.map((p) => {

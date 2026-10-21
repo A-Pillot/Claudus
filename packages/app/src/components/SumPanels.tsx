@@ -17,7 +17,8 @@ const fmt = (v: number | undefined, d = 4) => (v === undefined || !Number.isFini
 const templateOf = (m: Model, end: End): Template | undefined => {
   const s = m[end];
   if (!s) return undefined;
-  return m.templates?.find((t) => t.slot === s.templateSlot) ?? (hasTemplate(s.templateSlot) ? getTemplate(s.templateSlot) : undefined);
+  // The registry first: a file's own templates are registered when it opens, and only the registry follows later edits.
+  return hasTemplate(s.templateSlot) ? getTemplate(s.templateSlot) : m.templates?.find((t) => t.slot === s.templateSlot);
 };
 
 /** The model as the sum should see it: in compliant mode with the master force switch applied. */
