@@ -22,5 +22,12 @@ export async function initDesktop(): Promise<void> {
       await fs.writeTextFile(path, text);
       return baseName(path);
     },
+    saveBinary: async (suggestedName, data) => {
+      const ext = suggestedName.split('.').pop() ?? '';
+      const path = await dialog.save({ defaultPath: suggestedName, filters: [{ name: `${ext.toUpperCase()} files`, extensions: [ext] }] });
+      if (!path) return null;
+      await fs.writeFile(path, data instanceof Blob ? new Uint8Array(await data.arrayBuffer()) : data);
+      return baseName(path);
+    },
   });
 }

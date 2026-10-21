@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { ELEMENT_OPTIONS, getTemplate, hasTemplate, optionOf } from '@claudus/core';
 import { useApp, type GraphicsView } from '../store';
 import { cancelAdd, deleteGraphic, startAdd } from '../graphicsActions';
+import { captureFrame, useFrames } from '../video';
+import { VideoDialog } from './VideoDialog';
 
 const GROUPS = [...new Set(ELEMENT_OPTIONS.map((o) => o.group))];
 
@@ -33,6 +35,8 @@ export function GraphicsMenu() {
   const [open, setOpen] = useState(false);
   const [group, setGroup] = useState<string | null>(null);
   const [listing, setListing] = useState(false);
+  const [video, setVideo] = useState(false);
+  const frameCount = useFrames((s) => s.frames.length);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -101,8 +105,12 @@ export function GraphicsMenu() {
               <span className="tick">{view[k] ? '✓' : ''}</span>{label}
             </button>
           ))}
+          <hr />
+          <button onClick={() => { setOpen(false); setVideo(true); }}>Export animation…</button>
+          <button onClick={() => { setOpen(false); void captureFrame(); }}>Capture frame ({frameCount} captured)</button>
         </div>
       )}
+      {video && <VideoDialog onClose={() => setVideo(false)} />}
     </div>
   );
 }

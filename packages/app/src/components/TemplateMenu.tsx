@@ -98,7 +98,7 @@ function VecInput({ label, value, onChange }: { label: string; value: Vec3; onCh
     <div className="row">
       <label className="vlabel">{label}</label>
       {[0, 1, 2].map((k) => (
-        <NumberCell key={k} value={value[k]} onCommit={(v) => onChange(value.map((x, j) => (j === k ? v : x)) as Vec3)} />
+        <NumberCell key={k} unit="mm" value={value[k]} onCommit={(v) => onChange(value.map((x, j) => (j === k ? v : x)) as Vec3)} />
       ))}
     </div>
   );

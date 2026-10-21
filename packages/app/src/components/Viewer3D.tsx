@@ -5,6 +5,8 @@ import * as THREE from 'three';
 import { GenType, GROUND, findGen, mirrorY, type AxleState, type ComplianceResult, type Corner, type Vec3 } from '@claudus/core';
 import { useApp } from '../store';
 import { pickPoint } from '../graphicsActions';
+import { fmtUnit, useUnitSettings } from '../units';
+import { registerCanvas } from '../video';
 import { GraphicElements } from './GraphicShapes';
 import { CogScene, ComplianceScene } from './ComplianceScene';
 
@@ -25,8 +27,9 @@ export function Viewer3D({ corner, state, detail }: Props) {
   const origin: Vec3 = [wc[0], 0, corner.z0];
   return (
     <Canvas
+      gl={{ preserveDrawingBuffer: true }}
       camera={{ position: [-1.6, -1.4, 0.9], up: [0, 0, 1], fov: 40, near: 0.01, far: 100 }}
-      onCreated={({ camera }) => camera.lookAt(0, 0, 0.25)}
+      onCreated={({ camera, gl }) => { camera.lookAt(0, 0, 0.25); registerCanvas(gl.domElement); }}
       onPointerMissed={() => { const s = useApp.getState(); s.select(null); if (!s.addMode) s.selectGraphic(null); }}
     >
       <color attach="background" args={['#14171c']} />
@@ -51,6 +54,7 @@ export function Viewer3D({ corner, state, detail }: Props) {
 }
 
 function Side({ corner, points, mirrored }: { corner: Corner; points: Vec3[]; mirrored: boolean }) {
+  useUnitSettings();
   const t = corner.template;
   const selected = useApp((s) => s.selected);
   const select = useApp((s) => s.select);
@@ -91,7 +95,7 @@ function Side({ corner, points, mirrored }: { corner: Corner; points: Vec3[]; mi
               <Html center={false} zIndexRange={[5, 0]} style={{ pointerEvents: 'none', transform: 'translate(8px, -14px)' }}>
                 <div className="plabel">
                   {view.pointNos && <b>{tp.no}</b>}
-                  {view.pointValues && <span> {points[i].map((v) => v.toFixed(1)).join(', ')}</span>}
+                  {view.pointValues && <span> {points[i].map((v) => fmtUnit('mm', v, 1)).join(', ')}</span>}
                 </div>
               </Html>
             )}

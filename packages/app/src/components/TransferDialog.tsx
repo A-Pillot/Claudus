@@ -7,13 +7,14 @@ import { useApp } from '../store';
 import { files } from '../files';
 import { useTransfer } from '../transfer';
 import { NumberCell } from './PointTable';
+import { fmtUnit, useUnitSettings } from '../units';
 
 export type TransferMode = 'import' | 'export';
 
 const STATUS: Record<string, string> = {
   found: 'found', maths: 'formula', derived: 'derived', undefined: 'not defined', missing: 'not in file', error: 'error',
 };
-const fmt = (v: Vec3 | undefined) => (v ? v.map((x) => String(Number(x.toFixed(2)))).join('  ') : '');
+const fmt = (v: Vec3 | undefined) => (v ? v.map((x) => String(Number(fmtUnit('mm', x, 2)))).join('  ') : '');
 const AXES = ['X', 'Y', 'Z'];
 
 /**
@@ -21,6 +22,7 @@ const AXES = ['X', 'Y', 'Z'];
  * until Apply (import) or Save (export) is pressed.
  */
 export function TransferDialog({ mode, format, onClose }: { mode: TransferMode; format: FileFormat; onClose: () => void }) {
+  useUnitSettings();
   const model = useApp((s) => s.model);
   const currentEnd = useApp((s) => s.end);
   const { labels, settings, setLabel, resetLabels, setSettings } = useTransfer();
@@ -91,7 +93,7 @@ export function TransferDialog({ mode, format, onClose }: { mode: TransferMode; 
 
         <div className="row xform">
           <label>Shift</label>
-          {[0, 1, 2].map((k) => <NumberCell key={k} value={settings.shift[k]} onCommit={(v) => setSettings({ shift: settings.shift.map((x, j) => (j === k ? v : x)) as Vec3 })} />)}
+          {[0, 1, 2].map((k) => <NumberCell key={k} unit="mm" value={settings.shift[k]} onCommit={(v) => setSettings({ shift: settings.shift.map((x, j) => (j === k ? v : x)) as Vec3 })} />)}
           <label>Scale</label>
           {[0, 1, 2].map((k) => <NumberCell key={k} value={settings.scale[k]} onCommit={(v) => v !== 0 && setSettings({ scale: settings.scale.map((x, j) => (j === k ? v : x)) as Vec3 })} />)}
           <label>Switch</label>

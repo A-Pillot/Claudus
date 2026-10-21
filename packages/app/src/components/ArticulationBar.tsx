@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Corner } from '@claudus/core';
+import { fmtUnit, unitText, useUnitSettings } from '../units';
 import { useApp, type ArticulationState } from '../store';
 
 type Mode = keyof ArticulationState;
@@ -9,12 +10,13 @@ export function ArticulationBar({ corner }: { corner?: Corner }) {
   const art = useApp((s) => s.art);
   const setArt = useApp((s) => s.setArt);
   const [playing, setPlaying] = useState<Mode | null>(null);
+  useUnitSettings();
   const steerable = corner?.mech.rackPoint !== undefined;
 
-  const ranges: Record<Mode, { min: number; max: number; step: number; label: string; unit: string }> = {
-    bump: { min: -p.reboundTravel, max: p.bumpTravel, step: 0.5, label: 'Bump', unit: 'mm' },
-    roll: { min: -p.rollAngle, max: p.rollAngle, step: 0.05, label: 'Roll', unit: '°' },
-    rack: { min: -p.steerTravel, max: p.steerTravel, step: 0.5, label: 'Steer (rack)', unit: 'mm' },
+  const ranges: Record<Mode, { min: number; max: number; step: number; label: string; unit: string; digits: number }> = {
+    bump: { min: -p.reboundTravel, max: p.bumpTravel, step: 0.5, label: 'Bump', unit: 'mm', digits: 1 },
+    roll: { min: -p.rollAngle, max: p.rollAngle, step: 0.05, label: 'Roll', unit: 'deg', digits: 2 },
+    rack: { min: -p.steerTravel, max: p.steerTravel, step: 0.5, label: 'Steer (rack)', unit: 'mm', digits: 1 },
   };
 
   // Animate one articulation back and forth through its range.
@@ -45,7 +47,7 @@ export function ArticulationBar({ corner }: { corner?: Corner }) {
           <div key={m} className={`artctl${disabled ? ' disabled' : ''}`}>
             <label>
               {r.label}
-              <span className="val">{disabled ? 'n/a' : `${art[m].toFixed(m === 'roll' ? 2 : 1)} ${r.unit}`}</span>
+              <span className="val">{disabled ? 'n/a' : `${fmtUnit(r.unit, art[m], r.digits)} ${unitText(r.unit)}`}</span>
             </label>
             <input
               type="range"

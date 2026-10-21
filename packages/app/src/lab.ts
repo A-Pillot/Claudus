@@ -37,6 +37,9 @@ export interface EditLineTarget {
   variable: string;
   /** Shown in the dialog title. */
   label: string;
+  /** Units of x and y in the default units, for showing the table in the display units. */
+  xUnit?: string;
+  yUnit?: string;
 }
 
 type LineId = Pick<UserLine, 'sweep' | 'variable' | 'end'>;
