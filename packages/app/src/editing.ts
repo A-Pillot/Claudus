@@ -62,6 +62,13 @@ export const useEdit = create<EditStore>((set, get) => ({
   setCoincident: (coincident) => set({ coincident }),
 }));
 
+// The temporary group holds point indexes of one end of one model: drop it when those change.
+useApp.subscribe((s, p) => {
+  if (s.loads === p.loads && s.end === p.end && s.templatesRev === p.templatesRev) return;
+  const ed = useEdit.getState();
+  if (ed.tempGroup.length || ed.tempPicking) useEdit.setState({ tempGroup: [], tempPicking: false });
+});
+
 /** The points that move when point `index` is edited: its temporary or saved group, else just itself. */
 export function editSet(index: number): number[] {
   const { model, end } = useApp.getState();

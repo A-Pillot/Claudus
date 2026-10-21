@@ -105,6 +105,8 @@ export interface AppState {
    */
   applyTemplate: (t: Template, points?: Vec3[]) => void;
   templatesChanged: () => void;
+  /** Counts models loaded with setModel (open, new, text edit), for state that belongs to one model. */
+  loads: number;
 }
 
 function loadUndoLimit(): number {
@@ -118,6 +120,30 @@ let resetHistory = false;
 // While > 0 (a drag in progress), changes are not recorded one by one; the model at the start is recorded when it ends.
 let hold = 0;
 let heldFrom: Model | null = null;
+
+/**
+ * The templates each model was solved with, recorded when the model becomes current. A template edit changes
+ * the template registry as well as the model's points, so undo and redo put the templates back too.
+ */
+const templatesOf = new WeakMap<Model, Template[]>();
+function recordTemplates(m: Model): void {
+  if (templatesOf.has(m)) return;
+  templatesOf.set(m, (['front', 'rear'] as const).flatMap((e) => {
+    const d = m[e];
+    return d && hasTemplate(d.templateSlot) ? [getTemplate(d.templateSlot)] : [];
+  }));
+}
+/** Put back the templates a model was recorded with; true when any changed. */
+function restoreTemplates(m: Model): boolean {
+  let changed = false;
+  for (const t of templatesOf.get(m) ?? []) {
+    if (hasTemplate(t.slot) && getTemplate(t.slot) === t) continue;
+    if (t.source === 'builtin') registerTemplate(t);
+    else addToLibrary([t]);
+    changed = true;
+  }
+  return changed;
+}
 
 /** Group the changes until `endEdit` into one undo step (a drag). */
 export function beginEdit(): void {
@@ -179,6 +205,7 @@ export const useApp = create<AppState>((set, get) => ({
   selectGraphic: (selectedGraphic) => set({ selectedGraphic }),
   revision: 0,
   templatesRev: 0,
+  loads: 0,
   undoStack: [],
   redoStack: [],
   undoLimit: loadUndoLimit(),
@@ -191,14 +218,18 @@ export const useApp = create<AppState>((set, get) => ({
     const { undoStack, model } = get();
     if (!undoStack.length) return;
     restoring = true;
-    set((s) => ({ model: undoStack[undoStack.length - 1], undoStack: undoStack.slice(0, -1), redoStack: [...s.redoStack, model], dirty: true, revision: s.revision + 1, selectedGraphic: null }));
+    const to = undoStack[undoStack.length - 1];
+    const tplRev = restoreTemplates(to) ? 1 : 0;
+    set((s) => ({ model: to, undoStack: undoStack.slice(0, -1), redoStack: [...s.redoStack, model], dirty: true, revision: s.revision + 1, templatesRev: s.templatesRev + tplRev, selectedGraphic: null }));
     restoring = false;
   },
   redo: () => {
     const { redoStack, model } = get();
     if (!redoStack.length) return;
     restoring = true;
-    set((s) => ({ model: redoStack[redoStack.length - 1], redoStack: redoStack.slice(0, -1), undoStack: [...s.undoStack, model], dirty: true, revision: s.revision + 1, selectedGraphic: null }));
+    const to = redoStack[redoStack.length - 1];
+    const tplRev = restoreTemplates(to) ? 1 : 0;
+    set((s) => ({ model: to, redoStack: redoStack.slice(0, -1), undoStack: [...s.undoStack, model], dirty: true, revision: s.revision + 1, templatesRev: s.templatesRev + tplRev, selectedGraphic: null }));
     restoring = false;
   },
   setModel: (loaded, fileName) =>
@@ -206,7 +237,7 @@ export const useApp = create<AppState>((set, get) => ({
       resetHistory = true;
       // Templates saved in the file come first, so its suspensions can find them.
       loaded.templates?.forEach(registerTemplate);
-      return { undoStack: [], redoStack: [], model: completeModel(loaded), fileName, compliant: false, bushPoint: null, templatesRev: s.templatesRev + (loaded.templates?.length ? 1 : 0), dirty: false, end: loaded.front ? 'front' : 'rear', art: zeroArt, selected: null, selectedGraphic: null, addMode: null, revision: s.revision + 1 };
+      return { loads: s.loads + 1, undoStack: [], redoStack: [], model: completeModel(loaded), fileName, compliant: false, bushPoint: null, templatesRev: s.templatesRev + (loaded.templates?.length ? 1 : 0), dirty: false, end: loaded.front ? 'front' : 'rear', art: zeroArt, selected: null, selectedGraphic: null, addMode: null, revision: s.revision + 1 };
     }),
   replaceModel: (model) => set((s) => ({ model, dirty: true, revision: s.revision + 1 })),
   setEnd: (end) => set({ end, art: zeroArt, selected: null, selectedGraphic: null, addMode: null }),
@@ -258,8 +289,10 @@ export const useApp = create<AppState>((set, get) => ({
 }));
 
 // Record every model change (point edits, compliance, templates, ride height...) as an undo step.
+recordTemplates(useApp.getState().model);
 useApp.subscribe((s, prev) => {
   if (s.model === prev.model) return;
+  recordTemplates(s.model);
   if (restoring) return;
   if (resetHistory) { resetHistory = false; return; }
   if (hold > 0 || s.undoLimit <= 0) return;

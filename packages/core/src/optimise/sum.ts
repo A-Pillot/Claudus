@@ -4,7 +4,7 @@
  */
 import type { End, Model } from '../model/types.js';
 import { Corner } from '../solver/corner.js';
-import { bumpSweep, rollSweep, steerSweep } from '../results/derivatives.js';
+import { bumpSweep, rollSweep, steerSweep, sweepRange } from '../results/derivatives.js';
 import { makeCompliant } from '../compliance/apply.js';
 import { complianceCoefficients, type CoefficientValues } from '../compliance/analysis.js';
 import { defaultCompliance } from '../compliance/types.js';
@@ -24,6 +24,8 @@ export interface SumItem {
 export interface KinematicSum {
   total: number;
   items: SumItem[];
+  /** Sweep positions of the graph targets that did not solve, so are missing from their deviations. */
+  unsolved: number;
 }
 
 export interface SumOptions {
@@ -46,12 +48,19 @@ export function kinematicSum(m: Model, targets: SumTarget[], lines: UserLine[], 
     return corners.get(end);
   };
   const sweeps = new Map<string, unknown[]>();
+  let unsolved = 0;
   const rows = (end: End, sweep: Sweep) => {
     const k = `${end}:${sweep}`;
     if (!sweeps.has(k)) {
       const c = corner(end);
       if (!c) return undefined;
-      sweeps.set(k, sweep === 'bump' ? bumpSweep(c, m.params) : sweep === 'roll' ? rollSweep(c, m.params) : steerSweep(c, m.params));
+      const p = m.params;
+      const r = sweep === 'bump' ? bumpSweep(c, p) : sweep === 'roll' ? rollSweep(c, p) : steerSweep(c, p);
+      const wanted = sweep === 'bump' ? sweepRange(-p.reboundTravel, p.bumpTravel, p.bumpIncrement)
+        : sweep === 'roll' ? sweepRange(-p.rollAngle, p.rollAngle, p.rollIncrement)
+          : c.mech.rackPoint === undefined ? [] : sweepRange(-p.steerTravel, p.steerTravel, p.steerIncrement);
+      unsolved += Math.max(0, wanted.length - r.length);
+      sweeps.set(k, r);
     }
     return sweeps.get(k) as Parameters<typeof deviation>[0];
   };
@@ -80,5 +89,5 @@ export function kinematicSum(m: Model, targets: SumTarget[], lines: UserLine[], 
     }
     return { target, deviation: dev, weighted: dev === undefined ? 0 : dev * target.weight };
   });
-  return { total: items.reduce((s, i) => s + i.weighted, 0), items };
+  return { total: items.reduce((s, i) => s + i.weighted, 0), items, unsolved };
 }

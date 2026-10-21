@@ -151,3 +151,15 @@ describe('optimiser', () => {
     }
   });
 });
+
+describe('sweep positions that do not solve', () => {
+  it('are counted, so the optimiser cannot gain by losing them', () => {
+    const m = newModel(1);
+    const line = lineFromData(bumpRows(m), 'bump', 'camber', 'front');
+    const target: SumTarget = { kind: 'graph', end: 'front', sweep: 'bump', variable: 'camber', weight: 1, on: true };
+    expect(kinematicSum(m, [target], [line]).unsolved).toBe(0);
+    // Travel far past what the linkage can reach.
+    const far = { ...m, params: { ...m.params, bumpTravel: 2000, reboundTravel: 2000, bumpIncrement: 100 } };
+    expect(kinematicSum(far, [target], [line]).unsolved).toBeGreaterThan(0);
+  });
+});
