@@ -14,3 +14,4 @@ export * from './solver/corner.js';
 export * from './results/derivatives.js';
 export * from './results/sdf.js';
 export * from './model/new.js';
+export * from './twod/index.js';
