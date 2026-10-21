@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   COEFFICIENTS, dataPoints, getTemplate, hasTemplate, kinematicSum, lineKey, optimise, parameterValue, withParameter,
-  type End, type KinematicSum, type Model, type OptimiserParameter, type ParameterState, type SumTarget, type Sweep, type Template,
+  type End, type KinematicSum, type Side, type Model, type OptimiserParameter, type ParameterState, type SumTarget, type Sweep, type Template,
 } from '@claudus/core';
 import { useApp } from '../store';
 import { useLab } from '../lab';
@@ -53,7 +53,7 @@ export function useKinematicSum(enabled = true): { sum?: KinematicSum; busy: boo
 export const targetLabel = (t: SumTarget): string => {
   if (t.kind === 'graph') {
     const y = VARIABLES[t.sweep].ys.find((v) => v.key === t.variable);
-    return `${END_NAME[t.end]} ${y?.label ?? t.variable} (${SWEEP_NAME[t.sweep]})`;
+    return `${END_NAME[t.end]}${t.side === 'left' ? ' (-Y)' : ''} ${y?.label ?? t.variable} (${SWEEP_NAME[t.sweep]})`;
   }
   const c = COEFFICIENTS.find((x) => x.key === t.coefficient);
   return `${END_NAME[t.end]} compliance: ${c?.label ?? t.coefficient}, force set ${t.set + 1}`;
@@ -84,11 +84,11 @@ function KinSumBody() {
   const edit = (i: number, patch: Partial<SumTarget>) => setTargets(targets.map((t, j) => (j === i ? ({ ...t, ...patch } as SumTarget) : t)));
   const includeAll = () => {
     const have = new Set(targets.filter((t) => t.kind === 'graph').map((t) => lineKey(t as Extract<SumTarget, { kind: 'graph' }>)));
-    const added = lines.filter((l) => !have.has(lineKey(l))).map((l): SumTarget => ({ kind: 'graph', end: l.end, sweep: l.sweep, variable: l.variable, weight: 1, on: true }));
+    const added = lines.filter((l) => !have.has(lineKey(l))).map((l): SumTarget => ({ kind: 'graph', end: l.end, ...(l.side ? { side: l.side } : {}), sweep: l.sweep, variable: l.variable, weight: 1, on: true }));
     setTargets([...targets, ...added]);
   };
 
-  const [g, setG] = useState<{ end: End; sweep: Sweep; variable: string }>({ end: ends[0] ?? 'front', sweep: 'bump', variable: 'camber' });
+  const [g, setG] = useState<{ end: End; side: Side; sweep: Sweep; variable: string }>({ end: ends[0] ?? 'front', side: 'right', sweep: 'bump', variable: 'camber' });
   const [c, setC] = useState<{ end: End; set: number; coefficient: (typeof COEFFICIENTS)[number]['key']; target: number }>({ end: ends[0] ?? 'front', set: 0, coefficient: 'toe', target: 0 });
 
   return (
@@ -126,11 +126,12 @@ function KinSumBody() {
       <fieldset className="addrow">
         <legend>Add graph result</legend>
         <select aria-label="End" value={g.end} onChange={(e) => setG({ ...g, end: e.target.value as End })}>{ends.map((e) => <option key={e} value={e}>{END_NAME[e]}</option>)}</select>
+        <select aria-label="Side" value={g.side} onChange={(e) => setG({ ...g, side: e.target.value as Side })}><option value="right">+Y</option><option value="left">-Y</option></select>
         <select aria-label="Sweep" value={g.sweep} onChange={(e) => setG({ ...g, sweep: e.target.value as Sweep, variable: VARIABLES[e.target.value as Sweep].ys[0].key })}>
           <option value="bump">Bump</option><option value="roll">Roll</option><option value="steer">Steer</option>
         </select>
         <select aria-label="Variable" value={g.variable} onChange={(e) => setG({ ...g, variable: e.target.value })}>{VARIABLES[g.sweep].ys.map((v) => <option key={v.key} value={v.key}>{v.label}</option>)}</select>
-        <button onClick={() => setTargets([...targets, { kind: 'graph', ...g, weight: 1, on: true }])}>Add</button>
+        <button onClick={() => setTargets([...targets, { kind: 'graph', end: g.end, ...(g.side === 'left' ? { side: g.side } : {}), sweep: g.sweep, variable: g.variable, weight: 1, on: true }])}>Add</button>
       </fieldset>
       <fieldset className="addrow">
         <legend>Add compliance coefficient</legend>
@@ -159,9 +160,13 @@ function paramLabel(p: OptimiserParameter, t?: Template): string {
 }
 
 type RunStatus = 'idle' | 'running' | 'done' | 'stopped';
+/** One line of the optimiser's detail log. */
+interface LogRow { iteration: number; what: string; sum: number; values: number[] }
+
 interface RunState {
   status: RunStatus;
   history: number[];
+  log: LogRow[];
   startSum?: number;
   params: ParameterState[];
   values: number[];
@@ -169,7 +174,7 @@ interface RunState {
   result?: { model: Model; total: number };
   error?: string;
 }
-const IDLE: RunState = { status: 'idle', history: [], params: [], values: [], iteration: 0 };
+const IDLE: RunState = { status: 'idle', history: [], log: [], params: [], values: [], iteration: 0 };
 
 export function OptimiserPanel() {
   const on = useLab((s) => s.panels.optimiser);
@@ -195,6 +200,7 @@ function OptimiserBody() {
   const comp = useEffectiveCompliance();
   const live = useKinematicSum();
   const [run, setRun] = useState<RunState>(IDLE);
+  const [details, setDetails] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout>>();
   const stopFlag = useRef(false);
   const startModel = useRef<Model>(model);
@@ -252,11 +258,14 @@ function OptimiserBody() {
         const r = gen.next();
         if (r.done) return;
         const e = r.value;
-        if (e.type === 'start') st = { ...st, startSum: e.sum.total, history: [e.sum.total] };
-        else if (e.type === 'sensitivity') st = { ...st, params: e.parameters, iteration: e.iteration };
-        else if (e.type === 'step') st = { ...st, history: [...st.history, e.sum], values: e.values, iteration: e.iteration };
+        const last = st.history[st.history.length - 1];
+        if (e.type === 'start') st = { ...st, startSum: e.sum.total, history: [e.sum.total], log: [{ iteration: 0, what: 'start', sum: e.sum.total, values: st.values }] };
+        else if (e.type === 'sensitivity')
+          st = { ...st, params: e.parameters, iteration: e.iteration, log: [...st.log, { iteration: e.iteration, what: 'sensitivity pass', sum: last, values: e.parameters.map((q) => q.value) }] };
+        else if (e.type === 'step')
+          st = { ...st, history: [...st.history, e.sum], values: e.values, iteration: e.iteration, log: [...st.log, { iteration: e.iteration, what: e.parameter < 0 ? 'pattern move' : `P${e.parameter + 1}`, sum: e.sum, values: e.values }] };
         else {
-          st = { ...st, status: 'done', params: e.parameters, values: e.parameters.map((p) => p.value), iteration: e.iterations, history: [...st.history, e.sum.total], result: { model: e.model, total: e.sum.total } };
+          st = { ...st, status: 'done', log: [...st.log, { iteration: e.iterations, what: 'finished', sum: e.sum.total, values: e.parameters.map((q) => q.value) }], params: e.parameters, values: e.parameters.map((p) => p.value), iteration: e.iterations, history: [...st.history, e.sum.total], result: { model: e.model, total: e.sum.total } };
           setRun(st);
           return;
         }
@@ -354,6 +363,7 @@ function OptimiserBody() {
         <button className="primary" onClick={start} disabled={!canRun}>Run</button>
         <button onClick={stop} disabled={!running}>Stop</button>
         <button onClick={apply} disabled={running || !run.result} title="Put the optimised values into the model">Apply result to model</button>
+        <label className="inl" title="List every step of the run with the parameter values and the sum"><input type="checkbox" checked={details} onChange={(e) => setDetails(e.target.checked)} /> Details</label>
         <button onClick={revert} disabled={!backup || running} title="Go back to the model as it was before the result was applied">Revert</button>
         <span className="grow" />
         <span className="muted small" data-testid="opt-status">
@@ -387,6 +397,27 @@ function OptimiserBody() {
                   <td>{!s.parameter.on ? 'off' : s.screened ? 'screened' : 'used'}</td>
                 </tr>
               ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {details && (
+        <div className="tblwrap short" data-testid="opt-details">
+          <table className="ctable">
+            <thead>
+              <tr>
+                <th>Iter</th><th>Step</th><th>Sum</th>
+                {params.map((p, i) => <th key={i} title={paramLabel(p, templateOf(model, p.end))}>P{i + 1}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {run.log.map((r, k) => (
+                <tr key={k}>
+                  <td className="num">{r.iteration}</td><td>{r.what}</td><td className="num">{fmt(r.sum, 5)}</td>
+                  {params.map((_, i) => <td key={i} className="num">{fmt(r.values[i], 3)}</td>)}
+                </tr>
+              ))}
+              {run.log.length === 0 && <tr><td colSpan={3 + params.length} className="muted">Nothing run yet. P1, P2 ... are the parameters in the order listed above; each row is one accepted change.</td></tr>}
             </tbody>
           </table>
         </div>

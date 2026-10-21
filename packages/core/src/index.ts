@@ -21,6 +21,7 @@ export * from './compliance/solve.js';
 export * from './compliance/analysis.js';
 export * from './compliance/io.js';
 export * from './compliance/apply.js';
+export * from './compliance/freebody.js';
 export * from './io/hpFormat.js';
 export * from './io/hpMath.js';
 export * from './io/hardpoints.js';

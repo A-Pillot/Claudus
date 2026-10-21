@@ -11,17 +11,17 @@ import { unitText, useUnitSettings } from '../units';
 export function EditUserLineDialog() {
   const target = useLab((s) => s.editLine);
   if (!target) return null;
-  return <EditBody key={`${target.end}:${target.sweep}:${target.variable}`} />;
+  return <EditBody key={`${target.end}:${target.side}:${target.sweep}:${target.variable}`} />;
 }
 
 function EditBody() {
   const target = useLab((s) => s.editLine)!;
   useUnitSettings();
-  const existing = useLab((s) => s.userLines.find((l) => l.end === target.end && l.sweep === target.sweep && l.variable === target.variable));
+  const existing = useLab((s) => s.userLines.find((l) => l.end === target.end && (l.side ?? 'right') === target.side && l.sweep === target.sweep && l.variable === target.variable));
   const [rows, setRows] = useState<[number, number][]>(() => (existing ? existing.points.map((p) => [...p] as [number, number]) : []));
   const close = () => {
     // Rows are sorted into ascending x on closure; an empty table removes the line.
-    useLab.getState().setUserLine({ end: target.end, sweep: target.sweep, variable: target.variable, points: rows });
+    useLab.getState().setUserLine({ end: target.end, ...(target.side === 'left' ? { side: 'left' as const } : {}), sweep: target.sweep, variable: target.variable, points: rows });
     useLab.getState().setEditLine(null);
   };
   const set = (i: number, k: 0 | 1, v: number) => setRows(rows.map((r, j) => (j === i ? (k === 0 ? [v, r[1]] : [r[0], v]) : r) as [number, number]));
@@ -32,7 +32,7 @@ function EditBody() {
   };
   return (
     <Dlg title={`User line: ${target.label}`} onClose={close}>
-      <p className="muted small">Target curve for the +Y corner. Points are put in ascending x order when this window is closed.</p>
+      <p className="muted small">Target curve for the {target.side === 'left' ? '-Y (left)' : '+Y (right)'} corner. Points are put in ascending x order when this window is closed.</p>
       <div className="tblwrap">
         <table className="ctable" data-testid="userline-table">
           <thead><tr><th>#</th><th>X{target.xUnit ? ` (${unitText(target.xUnit)})` : ''}</th><th>Y{target.yUnit ? ` (${unitText(target.yUnit)})` : ''}</th><th /></tr></thead>

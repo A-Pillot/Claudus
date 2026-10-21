@@ -8,10 +8,10 @@ import { bumpSweep, rollSweep, steerSweep } from '../results/derivatives.js';
 import { makeCompliant } from '../compliance/apply.js';
 import { complianceCoefficients, type CoefficientValues } from '../compliance/analysis.js';
 import { defaultCompliance } from '../compliance/types.js';
-import { deviation, lineKey, type Sweep, type UserLine } from './lines.js';
+import { deviation, lineKey, type Side, type Sweep, type UserLine } from './lines.js';
 
 export type SumTarget =
-  | { kind: 'graph'; end: End; sweep: Sweep; variable: string; weight: number; on: boolean }
+  | { kind: 'graph'; end: End; side?: Side; sweep: Sweep; variable: string; weight: number; on: boolean }
   | { kind: 'compliance'; end: End; set: number; coefficient: keyof CoefficientValues; target: number; weight: number; on: boolean };
 
 export interface SumItem {

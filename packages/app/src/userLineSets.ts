@@ -4,7 +4,7 @@ const KEY = 'claudus.userLineSets';
 
 const isLine = (l: unknown): l is UserLine => {
   const x = l as UserLine;
-  return !!x && ['bump', 'roll', 'steer'].includes(x.sweep) && typeof x.variable === 'string' && (x.end === 'front' || x.end === 'rear')
+  return !!x && ['bump', 'roll', 'steer'].includes(x.sweep) && typeof x.variable === 'string' && (x.end === 'front' || x.end === 'rear') && (x.side === undefined || x.side === 'left' || x.side === 'right')
     && Array.isArray(x.points) && x.points.every((p) => Array.isArray(p) && p.length === 2 && Number.isFinite(p[0]) && Number.isFinite(p[1]));
 };
 
@@ -14,7 +14,7 @@ export function sanitiseSets(v: unknown): UserLineSet[] {
   if (!Array.isArray(list)) throw new Error('Not a user line set file.');
   return list
     .filter((s): s is UserLineSet => !!s && typeof s.label === 'string' && Array.isArray(s.lines))
-    .map((s) => ({ label: s.label, lines: s.lines.filter(isLine).map((l) => ({ sweep: l.sweep, variable: l.variable, end: l.end, points: l.points.map((p) => [p[0], p[1]] as [number, number]) })) }));
+    .map((s) => ({ label: s.label, lines: s.lines.filter(isLine).map((l) => ({ sweep: l.sweep, variable: l.variable, end: l.end, ...(l.side === 'left' ? { side: 'left' as const } : {}), points: l.points.map((p) => [p[0], p[1]] as [number, number]) })) }));
 }
 
 export function loadSets(): UserLineSet[] {

@@ -26,15 +26,15 @@ export function GraphsMenu({ results, busy }: { results?: EndAnalysis[]; busy: b
   const have = !!results && !busy;
   const slots = [...Array(SCOPE_SLOTS).keys()];
   const done = (fn: () => void) => () => { fn(); setOpen(false); };
-  const toggle = (k: 'deviation' | 'userLine' | 'scope', label: string) => (
+  const toggle = (k: 'deviation' | 'userLine' | 'scope' | 'derivative' | 'left', label: string) => (
     <button role="menuitemcheckbox" aria-checked={vis[k]} onClick={() => lab().setGraphVis({ [k]: !vis[k] })}>
       <span className="tick">{vis[k] ? '✓' : ''}</span>{label}
     </button>
   );
   const copyToUser = (rows: EndAnalysis[] | null, end: End) => {
-    const lines = allLines(rows ?? undefined, end);
-    // The copy replaces that end's user lines.
-    lab().setUserLines([...useLab.getState().userLines.filter((l) => l.end !== end), ...lines]);
+    const lines = [...allLines(rows ?? undefined, end), ...(vis.left ? allLines(rows ?? undefined, end, 'left') : [])];
+    // The copy replaces that end's user lines (both sides when the -Y lines are shown).
+    lab().setUserLines([...useLab.getState().userLines.filter((l) => l.end !== end || (!vis.left && l.side === 'left')), ...lines]);
   };
 
   return (
@@ -46,6 +46,14 @@ export function GraphsMenu({ results, busy }: { results?: EndAnalysis[]; busy: b
           {toggle('deviation', 'Deviation values')}
           {toggle('userLine', 'User line')}
           {toggle('scope', 'Scope lines')}
+          {toggle('derivative', 'Derivative values')}
+          {toggle('left', '-Y (left) wheel lines')}
+          <hr />
+          <div className="menurow"><span>All graphs</span>
+            <button onClick={done(() => lab().sendGraphCmd('swap'))}>Switch x-y</button>
+            <button onClick={done(() => lab().sendGraphCmd('autoscale'))}>Autoscale</button>
+            <button onClick={done(() => lab().sendGraphCmd('styles'))} title="Set every graph's colours and markers back to the defaults">Default styles</button>
+          </div>
           <hr />
           <div className="menuhead">Scope lines</div>
           <div className="menurow"><span>Store</span>

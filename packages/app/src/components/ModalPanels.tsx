@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { forcedSweep, type AxleState, type Corner, type ForcedResponse, type ModalResult } from '@claudus/core';
+import { forcedSweep, freeBodyParts, type AxleState, type FreeBody, type Corner, type ForcedResponse, type ModalResult } from '@claudus/core';
 import { useApp } from '../store';
-import { useLab, type DisplayMode } from '../lab';
+import { useLab, type ArticulationView, type DisplayMode, type SweepKind } from '../lab';
+import { stepValues, sweepLabel } from '../display';
 import { useEffectiveCompliance } from '../derived';
 import { NumberCell } from './PointTable';
 import { Panel } from './Panel';
+import { freeBodyColour } from './ComplianceScene';
 
 /** A rounded set of tick values covering a range. */
 export function niceTicks(lo: number, hi: number, count = 5): number[] {
@@ -28,19 +30,54 @@ const MODES: [DisplayMode, string][] = [
 ];
 
 /** View / Set Display Mode: what the 3D view draws in compliant mode, with its scalar and an Animate switch. */
-export function DisplayModeBar({ modal }: { modal?: ModalResult }) {
+export function DisplayModeBar({ modal, corner }: { modal?: ModalResult; corner?: Corner }) {
   const compliant = useApp((s) => s.compliant);
   const d = useLab((s) => s.display);
   const set = useLab((s) => s.setDisplay);
-  if (!compliant) return null;
+  const params = useApp((s) => s.model.params);
   const nModes = modal?.modes.length ?? 0;
+  const steps = stepValues(params, d.artSweep);
+  const articulation = !compliant || d.mode === 'articulation';
+  const fbPart = useLab((s) => s.freeBodyPart);
+  const setFb = useLab((s) => s.setFreeBodyPart);
+  const parts = corner ? freeBodyParts(corner) : [];
   return (
     <div className="displaybar" data-testid="display-mode">
-      <label>View
-        <select aria-label="Display mode" value={d.mode} onChange={(e) => set({ mode: e.target.value as DisplayMode })}>
-          {MODES.map(([m, l]) => <option key={m} value={m}>{l}</option>)}
-        </select>
-      </label>
+      {compliant && (
+        <label>View
+          <select aria-label="Display mode" value={d.mode} onChange={(e) => set({ mode: e.target.value as DisplayMode })}>
+            {MODES.map(([m, l]) => <option key={m} value={m}>{l}</option>)}
+          </select>
+        </label>
+      )}
+      {articulation && (
+        <>
+          <label>Show
+            <select aria-label="Articulation display" value={d.artView} onChange={(e) => set({ artView: e.target.value as ArticulationView })}>
+              <option value="live">Sliders</option>
+              <option value="all">All steps</option>
+              <option value="single">Single step</option>
+            </select>
+          </label>
+          {d.artView !== 'live' && (
+            <label>Travel
+              <select aria-label="Step travel" value={d.artSweep} onChange={(e) => set({ artSweep: e.target.value as SweepKind, step: 0 })}>
+                <option value="bump">Bump</option>
+                <option value="roll">Roll</option>
+                <option value="rack">Steer</option>
+              </select>
+            </label>
+          )}
+          {d.artView === 'single' && (
+            <label>Step
+              <select aria-label="Step" value={Math.min(d.step, steps.length)} onChange={(e) => set({ step: Number(e.target.value) })}>
+                <option value={0}>0 Static</option>
+                {steps.map((v, i) => <option key={i} value={i + 1}>{i + 1} {sweepLabel(d.artSweep, v)}</option>)}
+              </select>
+            </label>
+          )}
+        </>
+      )}
       {d.mode === 'deformed' && <label>Scalar <NumberCell value={d.deformScalar} onCommit={(v) => set({ deformScalar: Math.max(0, v) })} /></label>}
       {d.mode === 'mode' && (
         <>
@@ -57,7 +94,45 @@ export function DisplayModeBar({ modal }: { modal?: ModalResult }) {
           <label>Scalar <NumberCell value={d.forcedScalar} onCommit={(v) => set({ forcedScalar: Math.max(0, v) })} /></label>
         </>
       )}
-      <label className="inl"><input type="checkbox" checked={d.animate} disabled={d.mode === 'articulation'} onChange={(e) => set({ animate: e.target.checked })} /> Animate</label>
+      {parts.length > 0 && (
+        <label className="inl" title="Show only one part with its points and forces (forces need 3D Compliance)">
+          <input type="checkbox" aria-label="Free body diagram" checked={fbPart !== null} onChange={(e) => setFb(e.target.checked ? parts[0].part : null)} /> Free body
+          {fbPart !== null && (
+            <select aria-label="Free body part" value={fbPart} onChange={(e) => setFb(Number(e.target.value))}>
+              {parts.map((p) => <option key={p.part} value={p.part}>{p.name}</option>)}
+            </select>
+          )}
+        </label>
+      )}
+      {compliant && <label className="inl"><input type="checkbox" checked={d.animate} disabled={articulation} onChange={(e) => set({ animate: e.target.checked })} /> Animate</label>}
+    </div>
+  );
+}
+
+/** The forces on the free body part, listed over the 3D view. */
+export function FreeBodyTable({ fb }: { fb: FreeBody }) {
+  const compliant = useApp((s) => s.compliant);
+  const net = fb.forces.reduce<[number, number, number]>((s, f) => [s[0] + f.force[0], s[1] + f.force[1], s[2] + f.force[2]], [0, 0, 0]);
+  return (
+    <div className="overlay fbtable" data-testid="freebody">
+      <b>Free body: {fb.name}</b>
+      {!compliant && <div className="muted small">Switch on 3D Compliance to see the forces.</div>}
+      {fb.forces.length > 0 && (
+        <table className="ctable">
+          <thead><tr><th /><th>Force</th><th>Fx</th><th>Fy</th><th>Fz</th><th>N</th></tr></thead>
+          <tbody>
+            {fb.forces.map((f, i) => (
+              <tr key={i}>
+                <td><span className="swatch" style={{ background: freeBodyColour(f.kind) }} /></td>
+                <td>{f.kind === 'joint' ? `Point ${f.point} ${f.label}` : f.label}</td>
+                {f.force.map((v, k) => <td key={k} className="num">{v.toFixed(1)}</td>)}
+                <td className="num">{Math.hypot(...f.force).toFixed(1)}</td>
+              </tr>
+            ))}
+            <tr><td /><td>Net (unreported moments excluded)</td>{net.map((v, k) => <td key={k} className="num">{v.toFixed(2)}</td>)}<td className="num">{Math.hypot(...net).toFixed(2)}</td></tr>
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }

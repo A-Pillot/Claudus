@@ -2,13 +2,13 @@ import { useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Html, Line, OrbitControls, GizmoHelper, GizmoViewport } from '@react-three/drei';
 import * as THREE from 'three';
-import { GenType, GROUND, findGen, mirrorY, type AxleState, type ComplianceResult, type Corner, type Vec3 } from '@claudus/core';
+import { GenType, GROUND, findGen, mirrorY, type AxleState, type FreeBody, type ComplianceResult, type Corner, type Vec3 } from '@claudus/core';
 import { useApp } from '../store';
 import { pickPoint } from '../graphicsActions';
 import { fmtUnit, useUnitSettings } from '../units';
 import { registerCanvas } from '../video';
 import { GraphicElements } from './GraphicShapes';
-import { CogScene, ComplianceScene } from './ComplianceScene';
+import { CogScene, ComplianceScene, FreeBodyForces } from './ComplianceScene';
 
 const MM = 0.001; // scene units are metres
 
@@ -17,9 +17,13 @@ interface Props {
   state: AxleState;
   /** Present in compliant mode: joint results for the right-hand corner. */
   detail?: ComplianceResult;
+  /** Other solved steps drawn as a lighter overlay (articulation display, all steps). */
+  ghosts?: AxleState[];
+  /** Draw only this part, its points, elements and forces. */
+  freeBody?: FreeBody;
 }
 
-export function Viewer3D({ corner, state, detail }: Props) {
+export function Viewer3D({ corner, state, detail, ghosts, freeBody }: Props) {
   const view = useApp((s) => s.view);
   const compliant = useApp((s) => s.compliant);
   const wc = corner.mech.staticPoints[corner.mech.wheelCentre];
@@ -36,11 +40,23 @@ export function Viewer3D({ corner, state, detail }: Props) {
       <ambientLight intensity={0.7} />
       <directionalLight position={[2, -3, 4]} intensity={1.2} />
       <group position={[-origin[0] * MM, 0, -origin[2] * MM]} scale={MM}>
+        {freeBody ? (
+          <FreeBodyView corner={corner} points={state.right.points} fb={freeBody} />
+        ) : (
+          <>
         <Side corner={corner} points={state.right.points} mirrored={false} />
         {/* A corner model's left side is drawn as the mirror image; a full-axle template already has both. */}
         {detail && <ComplianceScene corner={corner} points={state.right.points} detail={detail} />}
         {compliant && <CogScene corner={corner} points={state.right.points} />}
         {state.leftMirror && view.bothSides && <Side corner={corner} points={state.leftMirror.points.map(mirrorY)} mirrored />}
+        {ghosts?.map((g, i) => (
+          <group key={i}>
+            <GraphicElements corner={corner} points={g.right.points} interactive={false} />
+            {g.leftMirror && view.bothSides && <GraphicElements corner={corner} points={g.leftMirror.points.map(mirrorY)} interactive={false} />}
+          </group>
+        ))}
+          </>
+        )}
         <Ground z={state.right.groundZ} x={wc[0]} />
         <RollCentre rc={state.rollCentre} />
         {view.triad && <axesHelper args={[300]} />}
@@ -50,6 +66,32 @@ export function Viewer3D({ corner, state, detail }: Props) {
         <GizmoViewport axisColors={['#e15759', '#59a14f', '#4e79a7']} labelColor="#fff" />
       </GizmoHelper>
     </Canvas>
+  );
+}
+
+/** Free body diagram: just one part with its points, graphic elements, wheel (if it carries one) and forces. */
+function FreeBodyView({ corner, points, fb }: { corner: Corner; points: Vec3[]; fb: FreeBody }) {
+  const t = corner.template;
+  const tyreWidths = useApp((s) => s.model.tyreWidths);
+  const on = new Set(fb.points.map((i) => t.points[i].no));
+  const showNos = useApp((s) => s.view.pointNos);
+  return (
+    <group>
+      <GraphicElements corner={corner} points={points} interactive={false} only={(g) => g.points.length > 0 && g.points.every((no) => on.has(no))} />
+      {corner.sides.map((w, k) => t.points[w.wc].part1 === fb.part && (
+        <Wheel key={k} wc={points[w.wc]} stub={points[w.stub]} radius={corner.radius} width={tyreWidths[(corner.end === 'front' ? 0 : 2) + (k === 1 ? 0 : 1)] || 150} />
+      ))}
+      {fb.points.map((i) => (
+        <mesh key={i} position={points[i]}>
+          <sphereGeometry args={[8, 16, 12]} />
+          <meshStandardMaterial color="#dfe6ee" />
+          <Html center={false} zIndexRange={[5, 0]} style={{ pointerEvents: 'none', transform: 'translate(8px, -14px)' }}>
+            <div className="plabel"><b>{t.points[i].no}</b>{showNos ? '' : ` ${t.points[i].label}`}</div>
+          </Html>
+        </mesh>
+      ))}
+      <FreeBodyForces fb={fb} />
+    </group>
   );
 }
 
