@@ -29,6 +29,21 @@ export interface BushData {
   lossAngle?: number;
 }
 
+/** Mass properties of one part (SHARK's C of G data). */
+export interface PartMass {
+  /** Part number, 1-based. */
+  part: number;
+  /** Where the C of G is: a template point, or a position; none means the part's centroid. */
+  cog: AxisRef;
+  /** Points defining the local inertia axes, as for a bush. None means the global axes. */
+  zAxis: AxisRef;
+  xzPlane: AxisRef;
+  /** kg. */
+  mass: number;
+  /** Ixx, Iyy, Izz, Ixy, Ixz, Iyz about the C of G in the local axes, kg.mm². */
+  inertia: [number, number, number, number, number, number];
+}
+
 export interface SpringData {
   rate: number; // N/mm
   freeLength: number; // mm
@@ -47,6 +62,8 @@ export interface EndCompliance {
   tyreRate: number;
   /** Joints with bush properties; every other joint is a rigid ball joint. */
   bushes: BushData[];
+  /** Part masses; parts not listed get a default 1 kg (SHARK's default) with a size-based inertia. */
+  masses?: PartMass[];
 }
 
 export interface ExternalForce {
