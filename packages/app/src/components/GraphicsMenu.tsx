@@ -12,6 +12,14 @@ const TOGGLES: [keyof GraphicsView, string][] = [
   ['triad', 'Triad (axes)'],
 ];
 
+/** Compliance visibility (SHARK's Graphics / Compliance Visibility): drawn only in compliant mode. */
+const COMPLIANCE_TOGGLES: [keyof GraphicsView, string][] = [
+  ['showBushes', 'Bushes and rigid joints'],
+  ['showBushAxes', 'Bush local axes'],
+  ['showForces', 'External forces'],
+  ['showJointForces', 'Calculated joint forces'],
+];
+
 /** SHARK's Graphics menu: add elements by picking points, delete the picked element, and display options. */
 export function GraphicsMenu() {
   const view = useApp((s) => s.view);
@@ -80,6 +88,13 @@ export function GraphicsMenu() {
           </button>
           <hr />
           {TOGGLES.map(([k, label]) => (
+            <button key={k} role="menuitemcheckbox" aria-checked={view[k]} onClick={() => setView({ [k]: !view[k] })}>
+              <span className="tick">{view[k] ? '✓' : ''}</span>{label}
+            </button>
+          ))}
+          <hr />
+          <div className="menuhead">Compliance visibility</div>
+          {COMPLIANCE_TOGGLES.map(([k, label]) => (
             <button key={k} role="menuitemcheckbox" aria-checked={view[k]} onClick={() => setView({ [k]: !view[k] })}>
               <span className="tick">{view[k] ? '✓' : ''}</span>{label}
             </button>

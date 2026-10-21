@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Corner } from '../src/solver/corner.js';
 import { newModel, newSuspension } from '../src/model/new.js';
-import { solveCompliance } from '../src/compliance/solve.js';
+import { resolveAxisRef, solveCompliance } from '../src/compliance/solve.js';
 import { complianceCoefficients } from '../src/compliance/analysis.js';
 import { makeCompliant } from '../src/compliance/apply.js';
 import { defaultBush, defaultCompliance, defaultEndCompliance, defaultSettings, type ExternalForce } from '../src/compliance/types.js';
@@ -128,5 +128,15 @@ describe('compliance in model files', () => {
     c.front = { ...defaultEndCompliance(), bushes: [defaultBush(1)] };
     const back = readDat(writeDat({ ...m, compliance: c })).compliance!;
     expect(back.front!.bushes).toEqual([{ ...defaultBush(1), xzPlane: { kind: 'none' } }]);
+  });
+});
+
+describe('axis references', () => {
+  it('resolves point, relative and absolute references', () => {
+    const by = (no: number) => (no === 7 ? ([1, 2, 3] as [number, number, number]) : undefined);
+    expect(resolveAxisRef({ kind: 'point', point: 7 }, [10, 10, 10], by)).toEqual([1, 2, 3]);
+    expect(resolveAxisRef({ kind: 'rel', v: [0, 0, 5] }, [10, 10, 10], by)).toEqual([10, 10, 15]);
+    expect(resolveAxisRef({ kind: 'abs', v: [4, 5, 6] }, [10, 10, 10], by)).toEqual([4, 5, 6]);
+    expect(resolveAxisRef({ kind: 'none' }, [0, 0, 0], by)).toBeUndefined();
   });
 });

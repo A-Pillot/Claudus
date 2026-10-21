@@ -7,6 +7,7 @@ import { templatesForModel } from '../templates';
 import { TemplateMenu } from './TemplateMenu';
 import { GraphicsMenu } from './GraphicsMenu';
 import { TransferMenu } from './TransferMenu';
+import { ComplianceMenus } from './ComplianceMenu';
 
 export function Toolbar({ analysis }: { analysis: AnalysisState }) {
   const { model, fileName, dirty, end, setModel, setEnd, markSaved } = useApp();
@@ -43,6 +44,7 @@ export function Toolbar({ analysis }: { analysis: AnalysisState }) {
       <TemplateMenu onError={setError} />
       <GraphicsMenu />
       <TransferMenu onError={setError} />
+      <ComplianceMenus />
       <span className="sep" />
       <div className="seg">
         {(['front', 'rear'] as End[]).map((e) => (

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { completeModel, getTemplate, hasTemplate, newModel, registerTemplate, remapPoints, type End, type Model, type Template, type Vec3, type VehicleParams } from '@claudus/core';
+import { completeModel, defaultCompliance, defaultEndCompliance, type ComplianceData, type EndCompliance, getTemplate, hasTemplate, newModel, registerTemplate, remapPoints, type End, type Model, type Template, type Vec3, type VehicleParams } from '@claudus/core';
 import type { ElementOption } from '@claudus/core';
 import { addToLibrary, loadLibrary } from './templates';
 
@@ -18,7 +18,17 @@ export interface GraphicsView {
   /** Show the left side of a single-corner template as a mirror image. */
   bothSides: boolean;
   triad: boolean;
+  /** Compliance visibility (only drawn in compliant mode). */
+  showBushes: boolean;
+  showBushAxes: boolean;
+  showForces: boolean;
+  showJointForces: boolean;
 }
+
+/** The compliance dialogs and result windows. */
+export type ComplianceDialogId =
+  | 'bushes' | 'bushSliders' | 'springs' | 'dampers' | 'tyre' | 'rollbar' | 'general' | 'forces'
+  | 'coefficients' | 'joints' | 'loads';
 
 /** An element being added: the picks made so far, in order. */
 export interface AddMode {
@@ -32,6 +42,21 @@ export interface AddMode {
 export interface AppState {
   view: GraphicsView;
   setView: (v: Partial<GraphicsView>) => void;
+  /** Solve / 3D Compliance: the live view, readouts and graphs use the compliant solution. */
+  compliant: boolean;
+  setCompliant: (on: boolean) => void;
+  /** Master switch for external forces (individual sets and forces keep their own switches). */
+  forcesOn: boolean;
+  setForcesOn: (on: boolean) => void;
+  dialog: ComplianceDialogId | null;
+  setDialog: (d: ComplianceDialogId | null) => void;
+  /** The bush (template point number) the stiffness sliders edit. */
+  bushPoint: number | null;
+  setBushPoint: (p: number | null) => void;
+  /** Edit a copy of the compliance data (created with defaults on first edit) and replace it in the model. */
+  editCompliance: (fn: (c: ComplianceData) => void) => void;
+  /** Edit the compliance data of the end being shown. */
+  editEndCompliance: (fn: (e: EndCompliance) => void) => void;
   addMode: AddMode | null;
   setAddMode: (a: AddMode | null) => void;
   /** Index of the graphic element picked in the 3D view (in the template's graphics list). */
@@ -66,14 +91,32 @@ export interface AppState {
 
 const zeroArt: ArticulationState = { bump: 0, roll: 0, rack: 0 };
 
-export const useApp = create<AppState>((set) => ({
+export const useApp = create<AppState>((set, get) => ({
   model: newModel(1),
   fileName: 'untitled.dat',
   dirty: false,
   end: 'front',
   art: zeroArt,
   selected: null,
-  view: { pointNos: false, pointValues: false, bothSides: true, triad: false },
+  view: { pointNos: false, pointValues: false, bothSides: true, triad: false, showBushes: true, showBushAxes: true, showForces: true, showJointForces: false },
+  compliant: false,
+  setCompliant: (compliant) => set({ compliant }),
+  forcesOn: true,
+  setForcesOn: (forcesOn) => set({ forcesOn }),
+  dialog: null,
+  setDialog: (dialog) => set({ dialog }),
+  bushPoint: null,
+  setBushPoint: (bushPoint) => set({ bushPoint }),
+  editCompliance: (fn) =>
+    set((s) => {
+      const c = structuredClone(s.model.compliance ?? defaultCompliance());
+      fn(c);
+      return { model: { ...s.model, compliance: c }, dirty: true, revision: s.revision + 1 };
+    }),
+  editEndCompliance: (fn) => {
+    const end = get().end;
+    get().editCompliance((c) => fn((c[end] ??= defaultEndCompliance())));
+  },
   setView: (v) => set((s) => ({ view: { ...s.view, ...v } })),
   addMode: null,
   setAddMode: (addMode) => set({ addMode }),
@@ -85,7 +128,7 @@ export const useApp = create<AppState>((set) => ({
     set((s) => {
       // Templates saved in the file come first, so its suspensions can find them.
       loaded.templates?.forEach(registerTemplate);
-      return { model: completeModel(loaded), fileName, templatesRev: s.templatesRev + (loaded.templates?.length ? 1 : 0), dirty: false, end: loaded.front ? 'front' : 'rear', art: zeroArt, selected: null, selectedGraphic: null, addMode: null, revision: s.revision + 1 };
+      return { model: completeModel(loaded), fileName, compliant: false, bushPoint: null, templatesRev: s.templatesRev + (loaded.templates?.length ? 1 : 0), dirty: false, end: loaded.front ? 'front' : 'rear', art: zeroArt, selected: null, selectedGraphic: null, addMode: null, revision: s.revision + 1 };
     }),
   setEnd: (end) => set({ end, art: zeroArt, selected: null, selectedGraphic: null, addMode: null }),
   setArt: (a) => set((s) => ({ art: { ...s.art, ...a } })),

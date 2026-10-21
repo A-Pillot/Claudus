@@ -80,6 +80,8 @@ function resolve(ref: AxisRef, origin: Vec3, byNo: (no: number) => Vec3 | undefi
   return undefined;
 }
 
+export { resolve as resolveAxisRef };
+
 export interface ComplianceOptions {
   settings: ComplianceSettings;
   /** External forces to apply (already filtered to this end and switched on). */
