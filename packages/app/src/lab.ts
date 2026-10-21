@@ -99,6 +99,10 @@ export interface LabState {
   optBackup: Model | null;
   setOptBackup: (m: Model | null) => void;
 
+  /** Part (1-based) shown as a free body diagram, or null for the normal view. */
+  freeBodyPart: number | null;
+  setFreeBodyPart: (p: number | null) => void;
+
   display: DisplaySettings;
   setDisplay: (d: Partial<DisplaySettings>) => void;
 }
@@ -146,6 +150,9 @@ export const useLab = create<LabState>((set) => ({
   setOptSettings: (optSettings) => set({ optSettings }),
   optBackup: null,
   setOptBackup: (optBackup) => set({ optBackup }),
+
+  freeBodyPart: null,
+  setFreeBodyPart: (freeBodyPart) => set({ freeBodyPart }),
 
   display: { mode: 'articulation', artView: 'live', artSweep: 'bump', step: 0, modeNo: 1, modeScalar: 20, forcedHz: 15, forcedScalar: 20, deformScalar: 10, animate: false },
   setDisplay: (d) => set((s) => ({ display: { ...s.display, ...d } })),

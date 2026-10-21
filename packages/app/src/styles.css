@@ -324,3 +324,5 @@ table.grid tr.st-undefined td, table.grid tr.st-derived td { opacity: 0.75; }
 .inertia label { display: flex; flex-direction: column; gap: 2px; }
 .inertia .numcell { width: 100%; text-align: right; border-color: var(--line); }
 .dialog .muted { color: var(--muted); margin: 0 0 4px; }
+.overlay.fbtable { left: auto; right: 12px; top: 44px; max-width: 60%; font-size: 11px; }
+.fbtable .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }

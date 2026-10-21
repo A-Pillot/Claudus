@@ -34,10 +34,12 @@ interface Props {
   points: Vec3[];
   /** Left-side mirror images are not clickable or labelled. */
   interactive: boolean;
+  /** Draw only the elements this accepts (the free body diagram's part). */
+  only?: (g: GraphicElement) => boolean;
 }
 
 /** Every graphic element of the template, at the current point positions. */
-export function GraphicElements({ corner, points, interactive }: Props) {
+export function GraphicElements({ corner, points, interactive, only }: Props) {
   const t = corner.template;
   const selectedGraphic = useApp((s) => s.selectedGraphic);
   const addMode = useApp((s) => s.addMode);
@@ -54,6 +56,7 @@ export function GraphicElements({ corner, points, interactive }: Props) {
   return (
     <group>
       {t.graphics.map((g, i) => {
+        if (only && !only(g)) return null;
         const shape = elementShape(g, at);
         if (!shape) return null;
         const picked = interactive && selectedGraphic === i;

@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Line } from '@react-three/drei';
 import * as THREE from 'three';
-import { add, bushAxes, endCompliance, forcesFor, partMasses, resolveAxisRef, type ComplianceResult, type Corner, type CornerState, type Vec3 } from '@claudus/core';
+import { add, bushAxes, type FreeBody, endCompliance, forcesFor, partMasses, resolveAxisRef, type ComplianceResult, type Corner, type CornerState, type Vec3 } from '@claudus/core';
 import { useApp } from '../store';
 import { useEffectiveCompliance } from '../derived';
 
@@ -102,6 +102,26 @@ export function ComplianceScene({ corner, points, detail }: { corner: Corner; po
     </group>
   );
 }
+
+const FB_COLOURS = { joint: '#c678dd', spring: '#a5e887', tyre: '#4dd0e1', external: '#ffd54a' } as const;
+
+/** Forces on one part (free body diagram): arrows at their points, the longest a fixed length. */
+export function FreeBodyForces({ fb }: { fb: FreeBody }) {
+  const max = Math.max(1e-9, ...fb.forces.map((f) => Math.hypot(...f.force)));
+  return (
+    <group>
+      {fb.forces.map((f, i) => {
+        const m = Math.hypot(...f.force);
+        if (m < 1e-6) return null;
+        const k = (JOINT_FORCE_MAX * 1.4) / max;
+        const tip = add(f.at, f.force.map((v) => v * k) as Vec3);
+        return <Arrow key={i} from={f.at} to={tip} color={FB_COLOURS[f.kind]} head={12} />;
+      })}
+    </group>
+  );
+}
+
+export const freeBodyColour = (kind: keyof typeof FB_COLOURS) => FB_COLOURS[kind];
 
 const COG_RADIUS = 14; // mm
 const COG_AXIS_LEN = 90; // mm

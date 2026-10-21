@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Corner, add, displacedPoints, forcedResponseAt, forcedSetup, modalAnalysis, responseAtPhase, solveAxle, sub,
+  Corner, add, displacedPoints, freeBody, type ComplianceResult, type FreeBody, forcedResponseAt, forcedSetup, modalAnalysis, responseAtPhase, solveAxle, sub,
   type AxleState, type ModalResult, type Vec3, type VehicleParams,
 } from '@claudus/core';
 import { useApp } from './store';
@@ -184,4 +184,23 @@ export function useDisplayedState(corner: Corner | undefined, state: AxleState |
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state, mode, artSolutions, steps, d.artSweep, kinematic, unitMode, modal, modeIndex, setup, response, corner, d.animate, d.deformScalar, d.modeScalar, d.forcedScalar, d.forcedHz, phaseDeg]);
+}
+
+/** The free body diagram of the selected part at the current articulation; undefined when the mode is off. */
+export function useFreeBody(corner: Corner | undefined, detail: ComplianceResult | undefined): FreeBody | undefined {
+  const part = useLab((s) => s.freeBodyPart);
+  const art = useApp((s) => s.art);
+  const comp = useEffectiveCompliance();
+  return useMemo(() => {
+    if (!corner || part === null || part > corner.template.parts.length) return undefined;
+    const deform = corner.deform;
+    corner.deform = undefined;
+    try {
+      return freeBody(corner, corner.solve(art).points, comp, detail, part);
+    } catch {
+      return undefined;
+    } finally {
+      corner.deform = deform;
+    }
+  }, [corner, part, art, comp, detail]);
 }
