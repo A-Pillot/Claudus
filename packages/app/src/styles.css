@@ -324,3 +324,12 @@ table.grid tr.st-undefined td, table.grid tr.st-derived td { opacity: 0.75; }
 .inertia label { display: flex; flex-direction: column; gap: 2px; }
 .inertia .numcell { width: 100%; text-align: right; border-color: var(--line); }
 .dialog .muted { color: var(--muted); margin: 0 0 4px; }
+
+/* units and animation export */
+.unitstable td { vertical-align: middle; }
+.unitstable select { max-width: 130px; }
+.framelist { display: flex; flex-wrap: wrap; gap: 6px; max-height: 120px; overflow: auto; }
+.framelist .frame { display: flex; flex-direction: column; align-items: center; gap: 2px; position: relative; }
+.framelist .frame img { width: 72px; border: 1px solid var(--line); border-radius: 3px; }
+.framelist .frame .icon { position: absolute; top: 0; right: 0; padding: 0 4px; font-size: 10px; }
+.dialog progress { width: 100%; }

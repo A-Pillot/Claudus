@@ -6,6 +6,7 @@ import { GenType, GROUND, findGen, mirrorY, type AxleState, type ComplianceResul
 import { useApp } from '../store';
 import { pickPoint } from '../graphicsActions';
 import { fmtUnit, useUnitSettings } from '../units';
+import { registerCanvas } from '../video';
 import { GraphicElements } from './GraphicShapes';
 import { CogScene, ComplianceScene } from './ComplianceScene';
 
@@ -26,8 +27,9 @@ export function Viewer3D({ corner, state, detail }: Props) {
   const origin: Vec3 = [wc[0], 0, corner.z0];
   return (
     <Canvas
+      gl={{ preserveDrawingBuffer: true }}
       camera={{ position: [-1.6, -1.4, 0.9], up: [0, 0, 1], fov: 40, near: 0.01, far: 100 }}
-      onCreated={({ camera }) => camera.lookAt(0, 0, 0.25)}
+      onCreated={({ camera, gl }) => { camera.lookAt(0, 0, 0.25); registerCanvas(gl.domElement); }}
       onPointerMissed={() => { const s = useApp.getState(); s.select(null); if (!s.addMode) s.selectGraphic(null); }}
     >
       <color attach="background" args={['#14171c']} />
