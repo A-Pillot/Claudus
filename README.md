@@ -5,6 +5,27 @@ This is a clone of Lotus Shark made by Claude.
 Claudus rebuilds the Lotus SHARK suspension analysis tool (v4.03) as a modern TypeScript app. It reads
 SHARK `.dat` model files, solves the suspension kinematics, and lists the same suspension derivatives.
 
+## Engine module (Lotus Engine Simulation rebuild)
+
+Claudus also rebuilds Lotus Engine Simulation 5.06 in `packages/engine`, with its screen under the **Engine**
+button in the toolbar (or open the app with `#engine` in the URL).
+
+- **Files:** reads and writes LES `.sim` models. All 17 tutorial models round-trip byte for byte.
+- **Solver:** 1D unsteady gas dynamics in pipes (MUSCL-Hancock/HLLC with friction, heat transfer and bend
+  losses) coupled to 0D cylinders, plenums and junctions. Wiebe combustion, Woschni/Annand/Eichelberg heat
+  transfer, poppet valves with Cd vs L/D, throttles, turbochargers with maps, superchargers, charge
+  coolers, waste-gate controls, and two-stroke engines (piston ports, disc and reed valves, crankcase
+  scavenging).
+- **Screen:** drag-and-drop network builder, element data editors, test-point table and sweep wizard, data
+  checking, undo/redo. Runs solve test points in parallel web workers.
+- **Results:** performance vs speed, crank-angle traces with overlays, P-V diagram, pipe display with
+  animation, sound level spectrum, `.mrs`-style text report and CSV export.
+- **Tools:** combustion analysis with Wiebe fitting, friction estimator, port flow analysis, concept builder,
+  parametric study and optimiser.
+
+Results are physically sensible but not calibrated to LES: the help file's equations were images, so the
+models use standard textbook forms.
+
 ## Status
 
 **Phase 1, the calculation core (`packages/core`)**

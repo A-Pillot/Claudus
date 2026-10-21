@@ -44,6 +44,37 @@ export interface CylinderSummary {
   fuelMass: number; // kg/cycle
 }
 
+/** Cycle-averaged figures of one turbocharger (or crank driven compressor / supercharger). */
+export interface TurboSummary {
+  id: number;
+  label: string;
+  speed: number; // rpm, compressor shaft
+  correctedSpeed: number; // rpm, compressor map basis (T_ref 288.15 K)
+  compressorPressureRatio: number;
+  boostPressure: number; // bar abs, compressor outlet
+  compressorMassFlow: number; // kg/s
+  compressorEfficiency: number; // isentropic
+  compressorPower: number; // kW
+  turbineMassFlow: number; // kg/s
+  turbinePressureRatio: number;
+  turbineEfficiency: number; // isentropic (map efficiency, power weighted)
+  turbinePower: number; // kW
+  wastegateArea?: number; // mm^2, mean controlled area
+}
+
+/** Crank-angle traces of one turbocharger over the last cycle. */
+export interface TurboTrace {
+  id: number;
+  angle: number[];
+  speed: number[]; // rpm
+  compressorPressureRatio: number[];
+  turbinePressureRatio: number[];
+  compressorMassFlow: number[]; // kg/s
+  turbineMassFlow: number[]; // kg/s
+  boostPressure: number[]; // bar abs
+  wastegateArea?: number[]; // mm^2
+}
+
 export interface TestPointResult {
   speed: number; // rpm
   cycles: number; // cycles run
@@ -63,8 +94,18 @@ export interface TestPointResult {
     cylinders: CylinderTrace[];
     pipes: PipeTrace[];
     plenums: PlenumTrace[];
+    turbos?: TurboTrace[];
   };
+  /** Turbochargers / superchargers, when the model has any. */
+  turbos?: TurboSummary[];
   warnings: string[];
+  /** Two-stroke gas exchange figures (cycle-averaged over the last cycle). */
+  scavenging?: {
+    deliveryRatio: number; // mass delivered to the crankcase / (ambient density * swept volume)
+    trappingEfficiency: number; // fresh charge trapped / delivered
+    scavengingEfficiency: number; // fresh charge trapped / total trapped
+    chargingEfficiency: number; // fresh charge trapped / (ambient density * swept volume)
+  };
   /** Optional full pipe profiles (pressure bar, velocity m/s, temperature K) per crank angle sample, for the pipe display. */
   profiles?: { angle: number[]; pipes: { id: number; x: number[]; p: number[][]; u: number[][]; T: number[][] }[] };
 }

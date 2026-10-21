@@ -23,6 +23,8 @@ import {
   type GasProps,
 } from '../thermo/index';
 import { buildNetwork, type AreaSource, type Network, type SimNode } from './network';
+import { createTurbo, type TurboSystem } from './turbo';
+import { crankVolume, isTwoStrokeValve, scavengeOutBurnt, stepReed, twoStrokeArea, twoStrokeLift, type ReedState } from './twostroke';
 
 export interface SimulateOptions {
   /** Indices of model.tests to run; default all. */
@@ -72,7 +74,7 @@ function inWindow(theta: number, open: number, close: number, cyc: number): bool
 function nodeGas(n: SimNode, fuelGas: (T: number, b: number) => GasProps): { p: number; T: number; gas: GasProps; burnt: number } {
   if (n.fixed) return { p: n.fixed.p, T: n.fixed.T, gas: fuelGas(n.fixed.T, n.fixed.burnt), burnt: n.fixed.burnt };
   const v = n.vol!;
-  return { p: v.p, T: v.T, gas: fuelGas(v.T, v.burnt), burnt: v.burnt };
+  return { p: v.p, T: v.T, gas: fuelGas(v.T, v.burnt), burnt: n.outBurnt ?? v.burnt };
 }
 
 export function simulatePoint(model: EngineModel, test: TestPoint, opts: SimulateOptions = {}, progress?: (f: number) => void): TestPointResult {
@@ -97,9 +99,12 @@ export function simulatePoint(model: EngineModel, test: TestPoint, opts: Simulat
   const profileEvery = opts.profileEvery ?? 5;
   const fuelGas = (T: number, b: number) => gasProps(T, b, fuel);
 
+  let turbo: TurboSystem | undefined; // turbo machinery, created once the grid size is known
   const throttleArea = (id: number): number => {
     const t = model.throttles.find((x) => x.id === id);
     if (!t) return 0;
+    const forced = turbo?.throttleArea(id);
+    if (forced !== undefined) return forced;
     const pos = test.throttle?.[id];
     return throttleEffectiveArea(pos === undefined ? t : { ...t, position: pos });
   };
@@ -146,6 +151,10 @@ export function simulatePoint(model: EngineModel, test: TestPoint, opts: Simulat
   for (const c of cyls) {
     const iv = (cylValves.get(c.cyl.id) ?? []).find((v) => v.kind === 'intake');
     if (iv) c.intakeClose = iv.closeAngle;
+    // Two-stroke: the charge is trapped when the last port closes (normally the exhaust port).
+    if (model.cycle === 2) {
+      for (const v of cylValves.get(c.cyl.id) ?? []) if (v.closeAngle > c.intakeClose && v.closeAngle < cycleDeg) c.intakeClose = v.closeAngle;
+    }
   }
 
   const thetaOf = (c: Cylinder, g: number) => wrap(g - c.firingAngle, cycleDeg);
@@ -156,6 +165,42 @@ export function simulatePoint(model: EngineModel, test: TestPoint, opts: Simulat
     v.V = cylinderVolume(c.cyl, thetaOf(c.cyl, 0));
     v.m = (v.p * v.V) / (fuelGas(v.T, v.burnt).R * v.T);
   }
+  // Two-stroke state: crankcase volumes, reed petals, scavenge ratio and delivered mass.
+  for (const n of net.nodes) {
+    if (!n.crank) continue;
+    n.vol!.V = crankVolume(n.crank, 0);
+    n.vol!.m = (n.vol!.p * n.vol!.V) / (fuelGas(n.vol!.T, n.vol!.burnt).R * n.vol!.T);
+  }
+  const reeds = new Map<Valve, ReedState>();
+  const reedBinds: { valve: Valve; intake: boolean; pipe?: { sp: (typeof net.pipes)[number]; end: 1 | 2; node: number }; a?: number; b?: number }[] = [];
+  for (const sp of net.pipes) for (const pe of sp.ends) {
+    if (pe.area.kind === 'valve' && pe.area.valve.type === 'reed' && pe.node >= 0) {
+      reeds.set(pe.area.valve, { x: 0, v: 0 });
+      reedBinds.push({ valve: pe.area.valve, intake: pe.area.valve.kind === 'intake', pipe: { sp, end: pe.end, node: pe.node } });
+    }
+  }
+  for (const l of net.links) {
+    if (l.area.kind === 'valve' && l.area.valve.type === 'reed') {
+      reeds.set(l.area.valve, { x: 0, v: 0 });
+      const flip = l.area.valve.kind === 'intake' && net.nodes[l.a].kind === 'cylinder';
+      reedBinds.push({ valve: l.area.valve, intake: true, a: flip ? l.b : l.a, b: flip ? l.a : l.b });
+    }
+  }
+  const updateReeds = (dt: number) => {
+    for (const rb of reedBinds) {
+      let dp: number;
+      if (rb.pipe) {
+        const pp = rb.pipe.sp.solver.sample(rb.pipe.end === 1 ? 0 : 1).p;
+        const pn = net.nodes[rb.pipe.node].vol!.p;
+        dp = rb.intake ? pp - pn : pn - pp;
+      } else dp = nodeGas(net.nodes[rb.a!], fuelGas).p - nodeGas(net.nodes[rb.b!], fuelGas).p;
+      stepReed(rb.valve.reed!, reeds.get(rb.valve)!, dp, dt);
+    }
+  };
+  const liftOf = (v: Valve, th: number) => (isTwoStrokeValve(v) ? twoStrokeLift(v, th, reeds.get(v)) : valveLift(v, th, cycleDeg));
+  const scavIn = new Float64Array(cyls.length); // fresh mass delivered to each cylinder since its TDC, kg
+  let delivered = 0; // net mass into crankcases this cycle, kg
+  let lastDelivered = 0;
 
   const areaOf = (src: AreaSource, pipeArea: number, gAngle: number): number => {
     switch (src.kind) {
@@ -168,6 +213,7 @@ export function simulatePoint(model: EngineModel, test: TestPoint, opts: Simulat
       case 'valve': {
         const c = model.cylinders.find((x) => x.id === src.cylinder);
         const th = c ? thetaOf(c, gAngle) : gAngle;
+        if (isTwoStrokeValve(src.valve)) return src.count * twoStrokeArea(src.valve, th, reeds.get(src.valve));
         return src.count * valveEffectiveArea(src.valve, th, cycleDeg);
       }
     }
@@ -181,6 +227,8 @@ export function simulatePoint(model: EngineModel, test: TestPoint, opts: Simulat
   // Trace recorders for the last cycle.
   const nGrid = Math.round(cycleDeg / DEG_GRID);
   const mkArr = () => new Array<number>(nGrid).fill(NaN);
+  turbo = createTurbo(model, net, { rpm, cycleDeg, fuel, nodeState: (n) => nodeGas(n, fuelGas), nGrid });
+  if (turbo) warnings.push(...turbo.warnings);
   interface CylRec {
     p: number[]; T: number[]; V: number[]; mfb: number[]; hr: number[]; ht: number[]; mi: number[]; me: number[]; li: number[]; le: number[];
   }
@@ -192,6 +240,7 @@ export function simulatePoint(model: EngineModel, test: TestPoint, opts: Simulat
     cylRec = cyls.map(() => ({ p: mkArr(), T: mkArr(), V: mkArr(), mfb: mkArr(), hr: mkArr(), ht: mkArr(), mi: mkArr(), me: mkArr(), li: mkArr(), le: mkArr() }));
     pipeRec = net.pipes.map(() => ({ ps: mkArr(), pm: mkArr(), pe: mkArr(), us: mkArr(), um: mkArr(), ue: mkArr(), ts: mkArr(), tm: mkArr(), te: mkArr() }));
     plenRec = net.nodes.filter((n) => n.kind === 'plenum').map(() => ({ p: mkArr(), T: mkArr() }));
+    turbo?.resetTraces();
     profiles = profileEvery > 0 ? { angle: [], pipes: net.pipes.map((sp) => ({ id: sp.model.id, x: [] as number[], p: [] as number[][], u: [] as number[][], T: [] as number[][] })) } : undefined;
   };
   resetRecorders();
@@ -240,6 +289,12 @@ export function simulatePoint(model: EngineModel, test: TestPoint, opts: Simulat
     const gNew = gAngle + dTheta;
 
     for (let i = 0; i < nNodes; i++) flowStreams[i].length = 0;
+    updateReeds(dt);
+    if (model.scavenge && model.scavenge.kind !== 'perfect-mixing') {
+      cyls.forEach((cs, ci) => {
+        cs.node.outBurnt = scavengeOutBurnt(model.scavenge, cs.node.vol!.burnt, scavIn[ci] / Math.max(rhoAmb * cs.Vd, 1e-12));
+      });
+    }
     stepMI.fill(0);
     stepME.fill(0);
 
@@ -264,6 +319,7 @@ export function simulatePoint(model: EngineModel, test: TestPoint, opts: Simulat
         if (f.mdot === 0) continue;
         // Into the node is the negative of into the pipe.
         const mdot = -f.mdot;
+        if (net.nodes[pe.node].crank) delivered += mdot * dt;
         const burntS = Math.min(1, Math.max(0, f.burntFlux / f.mdot));
         // The pipe's energy is cp*T based (zero at 0 K); convert via the stream's stagnation temperature.
         const T0s = f.hFlux / f.mdot / (pipeCp.get(sp) ?? 1005);
@@ -275,6 +331,7 @@ export function simulatePoint(model: EngineModel, test: TestPoint, opts: Simulat
             stepMI[ci] += mdot;
             const fresh = mdot > 0 ? 1 - Math.min(1, Math.max(0, f.burntFlux / f.mdot)) : 1 - cs.node.vol!.burnt;
             cs.airIn += mdot * dt * fresh;
+            if (mdot > 0) scavIn[ci] += mdot * dt * fresh;
           } else stepME[ci] += -mdot;
         }
       }
@@ -282,6 +339,14 @@ export function simulatePoint(model: EngineModel, test: TestPoint, opts: Simulat
 
     // Direct node-to-node links.
     for (const l of net.links) {
+      if (l.machine && turbo) {
+        const mf = turbo.flow(l, net.nodes[l.a], net.nodes[l.b], dt);
+        if (mf && mf.mdot !== 0) {
+          flowStreams[l.a].push({ mdot: -mf.mdot, h: mf.hA, burnt: mf.burnt });
+          flowStreams[l.b].push({ mdot: mf.mdot, h: mf.hB, burnt: mf.burnt });
+        }
+        if (mf) continue;
+      }
       const A = Math.max(0, areaOf(l.area, 0, gAngle));
       if (A <= 0) continue;
       const na = nodeGas(net.nodes[l.a], fuelGas);
@@ -300,6 +365,7 @@ export function simulatePoint(model: EngineModel, test: TestPoint, opts: Simulat
           if (l.area.valve.kind === 'intake') {
             stepMI[ci] += into;
             cs.airIn += into * dt * (1 - up.burnt);
+            if (into > 0) scavIn[ci] += into * dt * (1 - up.burnt);
           } else stepME[ci] += -into;
         }
       }
@@ -315,7 +381,8 @@ export function simulatePoint(model: EngineModel, test: TestPoint, opts: Simulat
       if (!v) continue;
       const cs = cylByNode.get(n);
       if (!cs) {
-        v.advance(dt, { Vnew: v.V, dV: 0, qCombustion: 0, qWall: 0, flows: flowStreams[i] });
+        const Vc = n.crank ? crankVolume(n.crank, gNew) : v.V;
+        v.advance(dt, { Vnew: Vc, dV: Vc - v.V, qCombustion: 0, qWall: 0, flows: flowStreams[i] });
         continue;
       }
       const ci = cyls.indexOf(cs);
@@ -340,7 +407,10 @@ export function simulatePoint(model: EngineModel, test: TestPoint, opts: Simulat
       if (!cs.combusting && rel0 <= burnStart && rel1 > burnStart) {
         cs.combusting = true;
         cs.freshAtStart = v.m * (1 - v.burnt);
-        cs.fuelMass = cs.freshAtStart / afr;
+        cs.fuelMass =
+          test.fuelPerInjection !== undefined
+            ? Math.min(test.fuelPerInjection * 1e-9 * (fuel.density > 0 ? fuel.density : 830), cs.freshAtStart / (stoichAfr(fuel) * 0.95))
+            : cs.freshAtStart / afr;
         cs.burnedSoFar = 0;
       }
       if (cs.combusting) {
@@ -375,7 +445,8 @@ export function simulatePoint(model: EngineModel, test: TestPoint, opts: Simulat
       const flows = burnFlows ? [...flowStreams[i], burnFlows] : flowStreams[i];
       // Combustion converts fresh charge to products.
       const dBurntMass = burnFlows ? (cs.freshAtStart * (burnFlows.mdot * dt)) / Math.max(cs.fuelMass, 1e-12) : 0;
-      v.advance(dt, { Vnew, dV, qCombustion: qComb, qWall, flows, dBurntMass });
+      v.advance(dt, { Vnew, dV, qCombustion: qComb, qWall, flows, dBurntMass, outBurnt: n.outBurnt });
+      if (th1 >= cycleDeg) scavIn[ci] = 0;
 
       const pAvg = 0.5 * (pOld + v.p);
       cs.workTotal += pAvg * dV;
@@ -387,6 +458,8 @@ export function simulatePoint(model: EngineModel, test: TestPoint, opts: Simulat
       stepHR[ci] = qComb / Math.max(dTheta, 1e-9);
       stepHT[ci] = qWallRate;
     }
+
+    turbo?.update(dt, dTheta, gNew, rpm);
 
     // Record traces on a 1-degree grid during the last cycle.
     if (recording) {
@@ -410,8 +483,8 @@ export function simulatePoint(model: EngineModel, test: TestPoint, opts: Simulat
           const vs = cylValves.get(cs.cyl.id) ?? [];
           const iv = vs.find((x) => x.kind === 'intake');
           const ev = vs.find((x) => x.kind === 'exhaust');
-          r.li[k] = iv ? valveLift(iv, th, cycleDeg) : 0;
-          r.le[k] = ev ? valveLift(ev, th, cycleDeg) : 0;
+          r.li[k] = iv ? liftOf(iv, th) : 0;
+          r.le[k] = ev ? liftOf(ev, th) : 0;
         });
         net.pipes.forEach((sp, pi) => {
           const r = pipeRec[pi];
@@ -441,6 +514,7 @@ export function simulatePoint(model: EngineModel, test: TestPoint, opts: Simulat
           });
           nextProfile += profileEvery;
         }
+        turbo?.record(nextGrid);
         nextGrid++;
       }
     }
@@ -469,10 +543,13 @@ export function simulatePoint(model: EngineModel, test: TestPoint, opts: Simulat
         c.peakP = 0;
         c.airIn = 0;
       }
+      lastDelivered = delivered;
+      delivered = 0;
+      const turboSettled = turbo ? turbo.endCycle() : true;
       progress?.(cycle / maxCycles);
       if (recording) break;
       const change = Math.abs(imep - prevImep) / Math.max(Math.abs(imep), 0.1);
-      const done = cycle >= minCycles && change < tol;
+      const done = cycle >= minCycles && change < tol && turboSettled;
       prevImep = imep;
       if (done || cycle >= maxCycles - 1) {
         converged = done;
@@ -492,14 +569,20 @@ export function simulatePoint(model: EngineModel, test: TestPoint, opts: Simulat
   const imep = s.imepCyl.reduce((a, b) => a + b, 0) / nCyl;
   const pmep = s.pmepCyl.reduce((a, b) => a + b, 0) / nCyl;
   const pmax = Math.max(0, ...s.peak.map((x) => x.p));
-  const fmep = chenFlynnFmep(friction, pmax, cyls.length ? meanPistonSpeed(cyls[0].cyl, rpm) : 0);
-  const bmep = imep - fmep;
+  const fmep = test.fmep !== undefined ? test.fmep : chenFlynnFmep(friction, pmax, cyls.length ? meanPistonSpeed(cyls[0].cyl, rpm) : 0);
+  const cyclesPerSecT = rpm / 60 / (model.cycle === 2 ? 1 : 2);
+  const turboLoadKW = turbo ? turbo.crankPowerKW() : 0; // crank driven compressors / superchargers
+  const bmep = imep - fmep - (totalVd > 0 ? (turboLoadKW * 1000) / (totalVd * cyclesPerSecT * 1e5) : 0);
   const cyclesPerSec = rpm / 60 / (model.cycle === 2 ? 1 : 2);
   const power = (bmep * 1e5 * totalVd * cyclesPerSec) / 1000; // kW
   const torque = power > -1e9 ? (power * 1000) / (rpm * 2 * Math.PI / 60) : 0;
   const airPerCycle = s.airIn.reduce((a, b) => a + b, 0);
   const fuelPerCycle = s.fuel.reduce((a, b) => a + b, 0);
-  const airMassFlow = airPerCycle * cyclesPerSec;
+  const twoStroke = model.cycle === 2;
+  const deliveredPerCycle = lastDelivered > 0 ? lastDelivered : airPerCycle;
+  const airMassFlow = (twoStroke ? deliveredPerCycle : airPerCycle) * cyclesPerSec;
+  const freshTrapped = s.trapped.reduce((a, m, i) => a + m * (1 - (s.residual[i] ?? 0)), 0);
+  const totalTrapped = s.trapped.reduce((a, m) => a + m, 0);
   const fuelMassFlow = fuelPerCycle * cyclesPerSec;
   const bsfc = power > 0 ? (fuelMassFlow * 3600 * 1000) / power : 0;
   const ve = totalVd > 0 ? airPerCycle / (rhoAmb * totalVd) : 0;
@@ -558,11 +641,22 @@ export function simulatePoint(model: EngineModel, test: TestPoint, opts: Simulat
     torque,
     bsfc,
     volumetricEfficiency: ve,
+    ...(twoStroke
+      ? {
+          scavenging: {
+            deliveryRatio: totalVd > 0 ? deliveredPerCycle / (rhoAmb * totalVd) : 0,
+            trappingEfficiency: deliveredPerCycle > 0 ? freshTrapped / deliveredPerCycle : 0,
+            scavengingEfficiency: totalTrapped > 0 ? freshTrapped / totalTrapped : 0,
+            chargingEfficiency: totalVd > 0 ? freshTrapped / (rhoAmb * totalVd) : 0,
+          },
+        }
+      : {}),
     airMassFlow,
     fuelMassFlow,
     thermalEfficiency: eff,
     cylinders,
-    traces: { cylinders: cylTraces, pipes: pipeTraces, plenums: plenTraces },
+    traces: { cylinders: cylTraces, pipes: pipeTraces, plenums: plenTraces, ...(turbo ? { turbos: turbo.traces(angles) } : {}) },
+    ...(turbo ? { turbos: turbo.summary() } : {}),
     warnings,
     profiles,
   };

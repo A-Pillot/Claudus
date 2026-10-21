@@ -16,6 +16,8 @@ export interface AdvanceInputs {
   flows?: VolumeFlow[];
   /** Mass of unburnt charge converted to burnt gas in the step, kg. */
   dBurntMass?: number;
+  /** Burnt fraction of the outflow when it differs from the mean (scavenging models); default = mean. */
+  outBurnt?: number;
 }
 
 export interface VolumeInit {
@@ -74,7 +76,7 @@ export class Volume0D {
     const mNew = Math.max(mOld + dmTot, 1e-12);
     // Burnt mass: outflow removes at the volume's own fraction.
     const outflow = dmTot - dmIn; // <= 0
-    let mb = mOld * this.burnt + dmBurntIn + outflow * this.burnt + (inp.dBurntMass ?? 0);
+    let mb = mOld * this.burnt + dmBurntIn + outflow * (inp.outBurnt ?? this.burnt) + (inp.dBurntMass ?? 0);
     mb = Math.min(Math.max(mb, 0), mNew);
     const bNew = mb / mNew;
 

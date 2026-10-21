@@ -21,7 +21,7 @@
 // PORTS        : `n`, then `$label`, `kind(1 intake,2 exhaust) portType(0 default,3 user CF table) nValves
 //                throatDia(mm)`, [user table: `rows`, rows x (L/D, Cf fwd, Cf rev)]. Port.diameter = throat dia,
 //                Port.extra = [portType, nValves].
-// VALVES       : `n`, then `$label`, `valveType(1 poppet,3 disc,4 piston port,...) kind(1 int,2 exh)`, then for
+// VALVES (two-stroke types 2 reed, 3 disc, 4 piston port: see decodeTwoStrokeValve): `n`, then `$label`, `valveType(1 poppet,3 disc,4 piston port,...) kind(1 int,2 exh)`, then for
 //                poppet: `liftOpt dataAction open close dwell maxLift lashOpen lashClose MOP`, and for
 //                liftOpt 3: `nPoints` + (angle from opening, lift) rows.
 //                Intake: open = deg BTDC (gas exchange), close = deg ABDC. Exhaust: open = deg BBDC, close =
@@ -44,7 +44,8 @@
 // THROTTLE     : `n`, per throttle `$label`, `type 0 0`, `flowArea(mm2)`, `Cd`. Type 1 = simple area.
 //                Throttle.diameter = equivalent dia of the area, kind 'area', position 1.
 // INLETS/EXITS : `n` + `$label` only. Pressure/temperature come from the TESTS (first test point).
-// COMPRESSORS, TURBINES : labels only are read; map data stays raw.
+// COMPRESSORS, TURBINES, COOLER, SHAFTS, LINKS, SENSORS, ACTUATORS, CONTROLS : decoded in turbo.ts (read only;
+//                the writer keeps the raw sections).
 // CONNECTIONS  : `n`, then lines `KIND id [end]  KIND id [end]  [KIND id ...]`: two linked elements plus
 //                restrictions (VALVE/PORT or THROTTLE) between them.
 // TESTS        : `n`, per test: label, then lines
@@ -71,11 +72,13 @@ import type {
   Pipe,
   Plenum,
   Port,
+  ScavengeModel,
   TestPoint,
   Throttle,
   Valve,
 } from '../model';
 import { builderToLayout } from './builder';
+import { parseTurboSections } from './turbo';
 import { HEADER_KEY, isNumericLine, nums, splitBlocks, splitSections, tokens } from './format';
 
 export interface Parsed {
@@ -173,6 +176,34 @@ function varyingVolume(bore: number, stroke: number, cr: number): number {
   return cr > 1 ? (vs * cr) / (cr - 1) : vs;
 }
 
+/**
+ * Two-stroke valve types (data line after the `type kind` header):
+ *  2 reed  : `liftOpt(1 quasi-static,2 dynamic) petals mass(g) stiffness(N/mm) petalArea(mm2) passage(mm) Cd maxLift(mm)`
+ *  3 disc  : `? discDia portDia A B Cd`, tutorial_12: A=42, B=260. The window that suits the crankcase (expanding
+ *            180..360 deg) is B -> A through TDC, so the file order is (close, open); deg ATDC firing
+ *  4 piston: `? width maxHeight stroke rod openAngle Cd` (openAngle deg ATDC; port is symmetric about BDC)
+ */
+function decodeTwoStrokeValve(v: Valve, type: number, d: number[], cycleLen: number): void {
+  if (type === 2 && d.length >= 8) {
+    v.type = 'reed';
+    v.reed = { dynamic: d[0] !== 1, petals: d[1], mass: d[2], stiffness: d[3], petalArea: d[4], passageLength: d[5], cd: d[6], maxLift: d[7] };
+    v.maxLift = d[7];
+    v.openAngle = 0;
+    v.closeAngle = cycleLen;
+  } else if (type === 3 && d.length >= 6) {
+    v.type = 'disc';
+    v.disc = { discDiameter: d[1], portDiameter: d[2], openAngle: d[4], closeAngle: d[3], cd: d[5] };
+    v.openAngle = d[4];
+    v.closeAngle = d[3];
+  } else if (type === 4 && d.length >= 7) {
+    v.type = 'piston-port';
+    v.piston = { width: d[1], height: d[2], stroke: d[3], conRod: d[4], openAngle: d[5], cd: d[6] };
+    v.maxLift = d[2];
+    v.openAngle = d[5];
+    v.closeAngle = wrapAngle(360 - d[5], cycleLen);
+  }
+}
+
 export function parseSections(
   header: string[],
   order: string[],
@@ -225,6 +256,12 @@ export function parseSections(
     };
   });
 
+  // Scavenging model: the cylinder flag line `m ? ?` (m = 0 perfect mixing, 1 displacement, 2 Benson-Brandham,
+  // 3 Blair) is a guess; every fixture has 0 = perfect mixing (the help's default).
+  const scavKinds: ScavengeModel['kind'][] = ['perfect-mixing', 'perfect-displacement', 'benson-brandham', 'blair'];
+  const sm = cylinders[0]?.extra?.[0] ?? 0;
+  const scavenge: ScavengeModel | undefined = sm >= 1 && sm <= 3 ? { kind: scavKinds[sm], a: 0.3, b: 1, c: 1 } : undefined;
+
   // ports
   const ps = splitBlocks(get('PORTS'));
   blocks.PORTS = ps.blocks;
@@ -272,6 +309,7 @@ export function parseSections(
     } else {
       // Other valve types: keep numbers of the data lines for reference.
       v.extra = [h[0], ...b.slice(2).flatMap((x) => nums(x))];
+      decodeTwoStrokeValve(v, h[0], nums(b[2]), cycleLen);
     }
     return v;
   });
@@ -289,6 +327,7 @@ export function parseSections(
     };
     if (type === 2) {
       p.volume = varyingVolume(data[0], data[1], data[3]);
+      p.varying = { bore: data[0], stroke: data[1], conRod: data[2], compressionRatio: data[3], tdcAngle: data[4], speedRatio: data[7] ?? 1 };
       p.wallTemperature = data[5] + C2K;
     } else {
       p.volume = data[0] * 1000;
@@ -373,6 +412,7 @@ export function parseSections(
     let afr = system === 'spark-ignition' ? stoich / 1.1 : 25;
     if (fu[0] === 2 && fu[1] > 0) afr = stoich / fu[1];
     else if (fu[0] === 1 && fu[1] > 0) afr = fu[1];
+    const fuelPerInjection = fu[0] === 3 && fu[1] > 0 ? fu[1] : undefined;
     const inl: { pressure: number; temperature: number }[] = [];
     const exl: { pressure: number }[] = [];
     for (let i = 0; i < nIn; i++) {
@@ -381,6 +421,9 @@ export function parseSections(
     }
     for (let i = 0; i < nEx; i++) exl.push({ pressure: nums(body[5 + nIn + i])[0] });
     let maxCycles = 20;
+    // Friction option 4 = user FMEP (bar).
+    const fr = nums(body[5 + nIn + nEx]);
+    const fmep = fr[0] === 4 && fr[1] >= 0 ? fr[1] : undefined;
     for (const l of body.slice(5 + nIn + nEx)) {
       const m = /^\s*1\s+(\d+)\s+(\d+)\s+(\d+)\s*$/.exec(l);
       if (m) maxCycles = Number(m[2]);
@@ -398,6 +441,8 @@ export function parseSections(
       tolerance: 0.01,
       boundary: { inlets: inl, exits: exl },
       extra: [sp[1] ?? 1],
+      ...(fmep !== undefined ? { fmep } : {}),
+      ...(fuelPerInjection !== undefined ? { fuelPerInjection } : {}),
     });
   }
 
@@ -411,8 +456,7 @@ export function parseSections(
     pressure: tests[0]?.boundary?.exits[i]?.pressure ?? 1, temperature: 900,
   }));
 
-  const compressors = splitBlocks(get('COMPRESSORS')).blocks.map((b, i) => ({ id: i + 1, label: label(b, `compressor ${i + 1}`) }));
-  const turbines = splitBlocks(get('TURBINES')).blocks.map((b, i) => ({ id: i + 1, label: label(b, `turbine ${i + 1}`) }));
+  const { compressors, turbines, turbo } = parseTurboSections(get);
 
   // connections
   const connections: Connection[] = [];
@@ -441,6 +485,7 @@ export function parseSections(
     fuel,
     burn,
     heatTransfer,
+    ...(scavenge ? { scavenge } : {}),
     temperatures: { ...DEFAULT_TEMPERATURES },
     friction: { ...DEFAULT_FRICTION },
     valves,
@@ -456,6 +501,7 @@ export function parseSections(
     tests,
     layout: builderToLayout(get('BUILDER')),
   };
+  if (turbo) model.turbo = turbo;
   return { model, blocks };
 }
 

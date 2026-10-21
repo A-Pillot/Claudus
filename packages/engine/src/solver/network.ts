@@ -1,7 +1,8 @@
 // Builds the simulation network from an EngineModel: every pipe end joins a 0D node
 // (cylinder, plenum, junction or ambient boundary), and nodes without a pipe between them
 // are linked directly through an orifice (valve, throttle or plain opening).
-import type { EngineModel, ElementRef, Pipe, Valve } from '../model';
+import type { EngineModel, ElementRef, Pipe, Plenum, Valve } from '../model';
+import { crankVolume } from './twostroke';
 import { Pipe1D } from '../pipes/index';
 import {
   Volume0D,
@@ -27,6 +28,10 @@ export interface SimNode {
   /** Fixed state for ambient boundaries (SI). */
   fixed?: { p: number; T: number; burnt: number };
   boundaryKind?: 'inlet' | 'exit';
+  /** Varying-volume plenum (crankcase): volume follows the crank angle. */
+  crank?: Plenum;
+  /** Burnt fraction of gas leaving the node when it differs from the mixed state (scavenging models). */
+  outBurnt?: number;
 }
 
 /** How the flow area of a link or pipe end is set. */
@@ -48,6 +53,8 @@ export interface NodeLink {
   b: number;
   area: AreaSource;
   label: string;
+  /** Set when the link carries a compressor, turbine or charge cooler (flow a -> b is the through-flow direction). */
+  machine?: { kind: 'compressor' | 'turbine' | 'cooler'; id: number };
 }
 
 export interface SimPipe {
@@ -118,7 +125,8 @@ export function buildNetwork(model: EngineModel, opts: BuildOptions): Network {
       kind: 'plenum',
       id: p.id,
       label: p.label || `Plenum ${p.id}`,
-      vol: new Volume0D({ V: Math.max(p.volume, 1) * 1e-6, p: opts.ambientP, T: opts.ambientT, burnt: 0, fuel }),
+      vol: new Volume0D({ V: p.varying ? crankVolume(p, 0) : Math.max(p.volume, 1) * 1e-6, p: opts.ambientP, T: opts.ambientT, burnt: 0, fuel }),
+      ...(p.varying ? { crank: p } : {}),
     });
   }
   for (const b of model.inlets) {
@@ -249,7 +257,11 @@ export function buildNetwork(model: EngineModel, opts: BuildOptions): Network {
       }
       let la = area;
       if (la.kind === 'open') la = { kind: 'fixed', area: Math.PI * 0.025 * 0.025 };
-      links.push({ a: na, b: nb, area: la, label: `${nodes[na].label} - ${nodes[nb].label}` });
+      const mach = via.find((v) => v.kind === 'compressor' || v.kind === 'turbine' || v.kind === 'cooler');
+      links.push({
+        a: na, b: nb, area: la, label: `${nodes[na].label} - ${nodes[nb].label}`,
+        ...(mach ? { machine: { kind: mach.kind as 'compressor' | 'turbine' | 'cooler', id: mach.id } } : {}),
+      });
       continue;
     }
     warnings.push(`Connection ${refKey(a)} - ${refKey(b)} involves elements that are not simulated yet.`);
@@ -296,8 +308,13 @@ export function buildNetwork(model: EngineModel, opts: BuildOptions): Network {
       if (pe.node < 0) warnings.push(`Pipe ${sp.model.id} end ${pe.end} is not connected (treated as closed).`);
     }
   }
-  if (model.compressors.length + model.turbines.length > 0) {
-    warnings.push('Turbochargers are not simulated yet; turbo elements are ignored.');
+  for (const kind of ['compressor', 'turbine'] as const) {
+    const list = kind === 'compressor' ? model.compressors : model.turbines;
+    for (const e of list) {
+      if (!links.some((l) => l.machine?.kind === kind && l.machine.id === e.id)) {
+        warnings.push(`${kind} ${e.id} is not connected between two nodes; ignored.`);
+      }
+    }
   }
   return { nodes, pipes, links, warnings };
 }

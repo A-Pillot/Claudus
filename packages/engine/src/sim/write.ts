@@ -106,10 +106,30 @@ function mkPort(p: Port, _i: number, tmpl?: string[]): string[] {
   return [lab(p.label), fI(kind) + fI(type) + fI(nv) + fF(p.diameter, 13, 3), ...tail];
 }
 
+/** Header + data lines of the two-stroke valve types (see decodeTwoStrokeValve in parse.ts). */
+function twoStrokeValveLines(v: Valve): string[] | undefined {
+  const kind = v.kind === 'exhaust' ? 2 : 1;
+  if (v.type === 'piston-port' && v.piston) {
+    const q = v.piston;
+    return [fI(4) + fI(kind), fI(1) + fF(q.width, 13, 2) + fF(q.height, 13, 2) + fF(q.stroke, 13, 2) + fF(q.conRod, 13, 2) + fF(q.openAngle, 13, 1) + fF(q.cd, 13, 3)];
+  }
+  if (v.type === 'disc' && v.disc) {
+    const q = v.disc;
+    return [fI(3) + fI(kind), fI(1) + fF(q.discDiameter, 13, 2) + fF(q.portDiameter, 13, 2) + fF(q.closeAngle, 13, 2) + fF(q.openAngle, 13, 2) + fF(q.cd, 13, 3)];
+  }
+  if (v.type === 'reed' && v.reed) {
+    const q = v.reed;
+    return [fI(2) + fI(kind), fI(q.dynamic ? 2 : 1) + fI(q.petals) + fF(q.mass, 13, 3) + fF(q.stiffness, 13, 3) + fF(q.petalArea, 13, 2) + fF(q.passageLength, 13, 2) + fF(q.cd, 13, 3) + fF(q.maxLift, 13, 2)];
+  }
+  return undefined;
+}
+
 function mkValve(m: EngineModel) {
   return (v: Valve, _i: number, tmpl?: string[], base?: Valve): string[] => {
     const type = v.extra?.[0] ?? 1;
     const kind = v.kind === 'exhaust' ? 2 : 1;
+    const ts = twoStrokeValveLines(v);
+    if (ts) return [lab(v.label), ...ts];
     if (type !== 1 && tmpl) return [lab(v.label), ...tmpl.slice(1)];
     const ex = v.extra ?? [];
     const curve = v.liftCurve && v.liftCurve.angle.length > 0 ? v.liftCurve : undefined;
@@ -204,7 +224,10 @@ function mkTest(ctx: Ctx) {
         body[2] = fI(1) + fG6(t.burnDuration);
       }
     }
-    if (!bt || bt.afr !== t.afr) {
+    if (t.fuelPerInjection !== undefined && (!bt || bt.fuelPerInjection !== t.fuelPerInjection)) {
+      const m3 = /^(\s*\d+)(\s+\S+)(.*)$/.exec(body[3] ?? '');
+      body[3] = fI(3) + fG6(t.fuelPerInjection) + (m3 ? m3[3] : fF(0.95, 13, 6));
+    } else if (t.fuelPerInjection === undefined && (!bt || bt.afr !== t.afr)) {
       const orig = body[3];
       const m2 = /^(\s*\d+)(\s+\S+)(.*)$/.exec(orig);
       const opt = si ? 2 : 1;
