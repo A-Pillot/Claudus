@@ -39,3 +39,6 @@ export * from './model/limits.js';
 export * from './results/combined.js';
 export * from './solver/options.js';
 export * from './model/staticAngles.js';
+export * from './model/axleFit.js';
+export * from './model/steering.js';
+export * from './results/tolerance.js';

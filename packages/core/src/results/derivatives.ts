@@ -345,7 +345,7 @@ export function analyse(m: Model, opts: AnalyseOptions = {}): EndAnalysis[] {
   for (const end of ['front', 'rear'] as const) {
     const data = m[end];
     if (!data) continue;
-    const corner = new Corner(data, end, undefined, solverOptionsFor(m, opts.solver));
+    const corner = new Corner(data, end, undefined, solverOptionsFor(m, opts.solver, end));
     const bump = bumpSteps(m.params, m.extendedBump);
     if (opts.compliant) makeCompliant(corner, m.compliance ?? defaultCompliance());
     out.push({

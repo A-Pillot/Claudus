@@ -15,15 +15,16 @@ import {
 import { defaultCompliance, type ComplianceData } from '../compliance/types.js';
 import { combinedLines, extendedBumpLines, parseCombined, parseExtendedBump } from '../model/combined.js';
 import { limitsLines, parseLimits } from '../model/limits.js';
+import { parseSteering, steeringLines } from '../model/steering.js';
 import { defaultParams, type Model, type PointGroup, type RawSection, type SuspensionData, type VehicleParams } from '../model/types.js';
 
 export const KNOWN_SECTIONS = [
   'VERSION', 'PARAMETERS', 'FRONT SUSPENSION', 'REAR SUSPENSION', 'TOLERANCES', 'TITLES', 'TYRE', 'BODY',
   'FORMULA', 'ROLL SOLUTION', 'GROUPS', 'COMPLIANCE', 'FORCES', 'FSETS', 'RAVEN_DEFAULTS', 'EXTENDED BUMP',
-  'COMBINED', 'USER LINES', 'USER TEMPLATES', 'CLAUDUS COMPLIANCE', 'CLAUDUS LIMITS',
+  'COMBINED', 'USER LINES', 'USER TEMPLATES', 'CLAUDUS COMPLIANCE', 'CLAUDUS LIMITS', 'CLAUDUS STEERING',
 ] as const;
 
-const PARSED = new Set(['VERSION', 'PARAMETERS', 'FRONT SUSPENSION', 'REAR SUSPENSION', 'TOLERANCES', 'TITLES', 'TYRE', 'ROLL SOLUTION', 'GROUPS', 'USER TEMPLATES', 'CLAUDUS COMPLIANCE', 'CLAUDUS LIMITS']);
+const PARSED = new Set(['VERSION', 'PARAMETERS', 'FRONT SUSPENSION', 'REAR SUSPENSION', 'TOLERANCES', 'TITLES', 'TYRE', 'ROLL SOLUTION', 'GROUPS', 'USER TEMPLATES', 'CLAUDUS COMPLIANCE', 'CLAUDUS LIMITS', 'CLAUDUS STEERING']);
 
 const nums = (line: string | undefined): number[] =>
   (line ?? '').trim() === '' ? [] : (line as string).trim().split(/[\s,]+/).map((s) => Number(s.replace(/[dD]/, 'E')));
@@ -121,6 +122,7 @@ export function readDat(text: string): Model {
   const combined = parseCombined(get('COMBINED')?.lines);
   const extendedBump = parseExtendedBump(get('EXTENDED BUMP')?.lines);
   const limits = parseLimits(get('CLAUDUS LIMITS')?.lines);
+  const steering = parseSteering(get('CLAUDUS STEERING')?.lines);
   return {
     version: nums(version.lines[0]),
     versionExtra: version.lines.slice(1),
@@ -135,6 +137,7 @@ export function readDat(text: string): Model {
     ...(combined ? { combined } : {}),
     ...(extendedBump ? { extendedBump } : {}),
     ...(limits ? { limits } : {}),
+    ...(steering ? { steering } : {}),
     ...(templates ? { templates } : {}),
     ...(compliance ? { compliance } : {}),
     sectionOrder: sections.map((s) => s.name),
@@ -223,6 +226,7 @@ export function writeDat(m: Model): string {
   if (m.combined && !order.includes('COMBINED')) order.push('COMBINED');
   if (m.extendedBump && !order.includes('EXTENDED BUMP')) order.push('EXTENDED BUMP');
   if (m.limits && !order.includes('CLAUDUS LIMITS')) order.push('CLAUDUS LIMITS');
+  if (m.steering && !order.includes('CLAUDUS STEERING')) order.push('CLAUDUS STEERING');
   const c = m.compliance;
   if (c && !order.includes('COMPLIANCE')) order.push('COMPLIANCE');
   if (c && !unedited(c) && !order.includes(CLAUDUS_COMPLIANCE_SECTION)) order.splice(order.indexOf('COMPLIANCE') + 1, 0, CLAUDUS_COMPLIANCE_SECTION);
@@ -291,6 +295,10 @@ export function writeDat(m: Model): string {
         else continue;
         break;
       }
+      case 'CLAUDUS STEERING':
+        if (!m.steering) continue;
+        body.push(...steeringLines(m.steering));
+        break;
       case 'CLAUDUS LIMITS':
         if (!m.limits) continue;
         body.push(...limitsLines(m.limits));

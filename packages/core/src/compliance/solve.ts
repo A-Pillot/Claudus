@@ -102,6 +102,10 @@ export interface ComplianceOptions {
   forces?: ExternalForce[];
   /** Include the spring preload. Defaults to settings.includeSpring. */
   includeSpring?: boolean;
+  /** Include the roll bar's torsion spring. Default true. */
+  rollBar?: boolean;
+  /** Load the bushes with the rotation the kinematic motion has already given their joints. Default false. */
+  bushPreload?: boolean;
 }
 
 /**
@@ -246,7 +250,7 @@ export function buildCompliance(c: Corner, st: CornerState, data: EndCompliance,
 
   // Roll bar: its two halves are joined by a torsion spring about the bar axis.
   const rev = t.points.findIndex((p) => hasGen(p, GenType.RollBarRevolute));
-  if (rev >= 0) {
+  if (rev >= 0 && opts.rollBar !== false) {
     const mounts = t.points.map((p, i) => (hasGen(p, GenType.RollBarAxisPoint) ? i : -1)).filter((i) => i >= 0);
     const p = t.points[rev];
     if (mounts.length >= 2 && p.part2 !== NONE) {
@@ -335,6 +339,26 @@ export function buildCompliance(c: Corner, st: CornerState, data: EndCompliance,
   for (const e of elements) {
     addSpring(e);
     if (e.loss) addSpring(e, Kloss, Math.tan(rad(e.loss)));
+  }
+
+  // Bush rotation pre-loads: a bush whose two sides have turned relative to each other in the kinematic
+  // motion (bump, roll, steer) starts out twisted, so its rotational stiffness loads the parts. Zero at static.
+  if (opts.bushPreload) {
+    const spin = (b: number): Vec3 => {
+      const mb = b < 0 ? undefined : c.mech.bodies.find((x) => x.part === b + 1);
+      return mb ? [st.x[mb.offset + 3], st.x[mb.offset + 4], st.x[mb.offset + 5]] : [0, 0, 0];
+    };
+    const chassis: Vec3 = [rad(-st.articulation.roll), 0, 0];
+    for (const e of elements) {
+      if (!e.bushed || e.kr.every((k) => k === 0)) continue;
+      const rel = sub(e.a >= 0 ? spin(e.a) : chassis, e.b >= 0 ? spin(e.b) : chassis);
+      let T: Vec3 = [0, 0, 0];
+      for (let i = 0; i < 3; i++) T = add(T, scale(e.R[i], e.kr[i] * dot(e.R[i], rel)));
+      for (let i = 0; i < 3; i++) {
+        if (e.a >= 0) F[6 * e.a + 3 + i] -= T[i];
+        if (e.b >= 0) F[6 * e.b + 3 + i] += T[i];
+      }
+    }
   }
 
   for (const f of opts.forces ?? []) {

@@ -73,6 +73,13 @@ export interface PointLimit {
   max: Vec3;
 }
 
+/** Steering mechanism of one end. A box needs three more points (SHARK's points 101 to 103). */
+export interface SteeringData {
+  type: 'rack' | 'box';
+  /** First and second point on the box axis, and the pitman joint. */
+  points: [Vec3, Vec3, Vec3];
+}
+
 export interface Model {
   /** File format version and module number from the VERSION section, plus any extra lines. */
   version: number[];
@@ -86,6 +93,8 @@ export interface Model {
   tyreWidths: number[];
   rollSolution: number;
   groups: PointGroup[];
+  /** Steering type and box points per end; absent means a rack. Kept in Claudus's own file section. */
+  steering?: { front?: SteeringData; rear?: SteeringData };
   combined?: CombinedProfile;
   extendedBump?: ExtendedBump;
   /** Point limit boxes per end, by data point index; a missing entry means the default tolerance. */

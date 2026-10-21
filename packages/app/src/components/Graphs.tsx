@@ -7,7 +7,7 @@ import { useLab } from '../lab';
 import { defaultOptions, defaultStyle, drawMarker, GraphStyleDialog, type GraphOptions, type Marker } from './GraphOptions';
 import { useUnitSettings } from '../units';
 
-type Mode = 'bump' | 'roll' | 'steer';
+type Mode = 'bump' | 'roll' | 'steer' | 'combined';
 
 interface VarDef { key: string; label: string; unit: string; get: (row: any) => number }
 
@@ -69,6 +69,22 @@ export const VARIABLES: Record<Mode, { x: VarDef; ys: VarDef[] }> = {
       { key: 'turningRadius', label: 'Turning radius', unit: 'mm', get: g('turningRadius') },
     ],
   },
+  combined: {
+    x: { key: 'step', label: 'Combined motion step', unit: '', get: g('step') },
+    ys: [
+      { key: 'bump', label: 'Bump travel', unit: 'mm', get: g('bump') },
+      { key: 'rack', label: 'Rack travel', unit: 'mm', get: g('rack') },
+      { key: 'camber', label: 'Camber angle', unit: 'deg', get: g('camber') },
+      { key: 'toeSae', label: 'Toe angle (SAE)', unit: 'deg', get: g('toeSae') },
+      { key: 'toeChange', label: 'Toe change', unit: 'deg', get: g('toeChange') },
+      { key: 'castor', label: 'Castor angle', unit: 'deg', get: g('castor') },
+      { key: 'kingpin', label: 'Kingpin angle', unit: 'deg', get: g('kingpin') },
+      { key: 'halfTrackChange', label: 'Half track change', unit: 'mm', get: g('halfTrackChange') },
+      { key: 'wheelbaseChange', label: 'Wheelbase change', unit: 'mm', get: g('wheelbaseChange') },
+      { key: 'damperTravel', label: 'Damper travel', unit: 'mm', get: g('damperTravel') },
+      { key: 'springTravel', label: 'Spring travel', unit: 'mm', get: g('springTravel') },
+    ],
+  },
 };
 
 /** The plottable results of the measurement elements (distance, components, angle) of every end's template. */
@@ -109,7 +125,7 @@ export function allLines(results: EndAnalysis[] | undefined, end: End, side: Sid
   const r = results?.find((e) => e.end === end);
   if (!r) return [];
   const out: UserLine[] = [];
-  for (const sweep of ['bump', 'roll', 'steer'] as Mode[])
+  for (const sweep of ['bump', 'roll', 'steer'] as Sweep[])
     for (const v of VARIABLES[sweep].ys) {
       const l = lineFromData(r[sweep], sweep, v.key, end, side);
       if (l.points.length) out.push(l);
@@ -133,7 +149,7 @@ function GraphCard({ results, mode, varKey, onChange }: { results?: EndAnalysis[
   const units = useUnitSettings();
   const fx = unitFactor(def.x.unit, units);
   const fy = unitFactor(y.unit, units);
-  const current = (mode === 'bump' ? art.bump : mode === 'roll' ? art.roll : art.rack) * fx;
+  const current = mode === 'combined' ? NaN : (mode === 'bump' ? art.bump : mode === 'roll' ? art.roll : art.rack) * fx;
   const userLines = useLab((s) => s.userLines);
   const scope = useLab((s) => s.scope);
   const vis = useLab((s) => s.graphVis);
@@ -157,9 +173,9 @@ function GraphCard({ results, mode, varKey, onChange }: { results?: EndAnalysis[
 
   const ends = useMemo(() => (results ?? []).filter((r) => r[mode].length > 0), [results, mode]);
   // Steer results are inner/outer wheel values, so there is no separate left-hand data line for them.
-  const sides: Side[] = vis.left && mode !== 'steer' ? ['right', 'left'] : ['right'];
+  const sides: Side[] = vis.left && mode !== 'steer' && mode !== 'combined' ? ['right', 'left'] : ['right'];
   const idOf = (end: End, side: Side) => ({ end, side, sweep: mode as Sweep, variable: y.key });
-  const lineFor = (end: End, side: Side) => userLines.find((l) => lineKey(l) === lineKey(idOf(end, side)));
+  const lineFor = (end: End, side: Side) => mode === 'combined' ? undefined : userLines.find((l) => lineKey(l) === lineKey(idOf(end, side)));
   const sideName = (side: Side) => (side === 'left' ? ' -Y' : '');
 
   const { data, series, metas } = useMemo(() => {
@@ -200,7 +216,7 @@ function GraphCard({ results, mode, varKey, onChange }: { results?: EndAnalysis[
         cols.push({
           s: { label: END_NAME[e.end] + sideName(side), stroke: ls.colour, width: 2, dash: side === 'left' ? [8, 4] : undefined, spanGaps: true, points: { show: false } },
           meta: { marker: ls.marker, colour: ls.colour, size: 3, grad: true },
-          m: rowsMap((side === 'left' ? leftRows(e[mode] as any[], mode) : e[mode]) as any[]),
+          m: rowsMap((side === 'left' ? leftRows(e[mode] as any[], mode as Sweep) : e[mode]) as any[]),
         });
       }
     const xs = [...new Set(cols.flatMap((c) => [...c.m.keys()]))].sort((a, b) => a - b);
@@ -212,14 +228,14 @@ function GraphCard({ results, mode, varKey, onChange }: { results?: EndAnalysis[
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ends, y, def, userLines, scope, vis.scope, vis.userLine, vis.left, mode, opts.style, fx, fy]);
 
-  const devs = useMemo(() => ends.flatMap((e) => sides.map((side) => {
+  const devs = useMemo(() => mode === 'combined' ? [] : ends.flatMap((e) => sides.map((side) => {
     const l = lineFor(e.end, side);
     const snap = scope[devSlot]?.find((x) => x.end === e.end);
     return {
       end: e.end,
       side,
       user: l ? deviation(e[mode] as any[], l) : undefined,
-      scope: snap?.[mode].length ? deviation(e[mode] as any[], lineFromData(snap[mode] as any[], mode, y.key, e.end, side)) : undefined,
+      scope: snap?.[mode].length ? deviation(e[mode] as any[], lineFromData(snap[mode] as any[], mode as Sweep, y.key, e.end, side)) : undefined,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   })), [ends, userLines, scope, devSlot, mode, y, vis.left]);
@@ -227,8 +243,8 @@ function GraphCard({ results, mode, varKey, onChange }: { results?: EndAnalysis[
   const closeMenu = () => setMenu(null);
   const run = (fn: () => void) => () => { fn(); closeMenu(); };
   const title = `${y.label} against ${def.x.label.toLowerCase()}`;
-  const edit = (end: End, side: Side) => lab().setEditLine({ end, side, sweep: mode, variable: y.key, label: `${END_NAME[end]} ${side === 'left' ? '(-Y) ' : ''}${title}`, xUnit: def.x.unit, yUnit: y.unit });
-  const copyData = () => ends.forEach((e) => sides.forEach((side) => lab().setUserLine(lineFromData(e[mode] as any[], mode, y.key, e.end, side))));
+  const edit = (end: End, side: Side) => lab().setEditLine({ end, side, sweep: mode as Sweep, variable: y.key, label: `${END_NAME[end]} ${side === 'left' ? '(-Y) ' : ''}${title}`, xUnit: def.x.unit, yUnit: y.unit });
+  const copyData = () => mode !== 'combined' && ends.forEach((e) => sides.forEach((side) => lab().setUserLine(lineFromData(e[mode] as any[], mode as Sweep, y.key, e.end, side))));
   const store = (slot: number) => results && lab().storeScope(slot, results);
   const hasUser = userLines.some((l) => ends.some((e) => (['right', 'left'] as Side[]).some((side) => lineKey(l) === lineKey(idOf(e.end, side)))));
 
@@ -239,6 +255,7 @@ function GraphCard({ results, mode, varKey, onChange }: { results?: EndAnalysis[
           <option value="bump">Bump</option>
           <option value="roll">Roll</option>
           <option value="steer">Steer</option>
+          <option value="combined">Combined</option>
         </select>
         <select value={y.key} onChange={(e) => { onChange(mode, e.target.value); setView(null); }}>
           {def.ys.map((v) => <option key={v.key} value={v.key}>{v.label}</option>)}
@@ -268,7 +285,7 @@ function GraphCard({ results, mode, varKey, onChange }: { results?: EndAnalysis[
       {styling && <GraphStyleDialog options={opts} onChange={setOpts} onClose={() => setStyling(false)} />}
       {menu && (
         <GraphMenu at={menu} onClose={closeMenu}>
-          {ends.flatMap((e) => (['right', 'left'] as Side[]).map((side) => (
+          {ends.flatMap((e) => (mode === 'combined' ? [] : ['right', 'left'] as Side[]).map((side) => (
             <button key={e.end + side} onClick={run(() => edit(e.end, side))}>Edit {END_NAME[e.end].toLowerCase()} ({side === 'left' ? '-Y' : '+Y'}) user line…</button>
           )))}
           <button disabled={!ends.length} onClick={run(copyData)}>Copy data line to user line</button>

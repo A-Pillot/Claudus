@@ -129,7 +129,7 @@ export class Corner {
     const phi = rad(-a.roll); // rotation about +X: negative raises -Y, lowers +Y side
     const origin: Vec3 = [0, 0, this.rollAxisZ];
     const body = a.roll !== 0 ? (p: Vec3) => rotateAbout(p, origin, [1, 0, 0], phi) : undefined;
-    return { groundZ: this.z0 + a.bump, groundZ2: this.z0Left + a.bump, body, rack: a.rack };
+    return { groundZ: this.z0 + a.bump, groundZ2: this.z0Left + a.bump, body, rack: a.rack, steerAxis: this.options.steerAxis };
   }
 
   solve(a: Articulation, warm?: number[]): CornerState {
