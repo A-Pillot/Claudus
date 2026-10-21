@@ -2,6 +2,8 @@
  * Suspension derivatives, following SHARK's definitions (SAE J670e plus Lotus conventions).
  * All values are for the right-hand (+Y) corner; signs follow the SHARK help "Theory" topic.
  */
+import { makeCompliant } from '../compliance/apply.js';
+import { defaultCompliance } from '../compliance/types.js';
 import { deg, mirrorY, sub, type Vec3 } from '../math/vec3.js';
 import type { Model, VehicleParams } from '../model/types.js';
 import { Corner, intersectYZ, type CornerRates, type CornerState } from '../solver/corner.js';
@@ -300,12 +302,21 @@ export interface EndAnalysis {
 }
 
 /** Run the standard SHARK analysis (statics, bump, roll and steer sweeps) for every end of a model. */
-export function analyse(m: Model): EndAnalysis[] {
+export interface AnalyseOptions {
+  /**
+   * Run the analysis in compliant mode: every position is deflected under the spring preload and the active
+   * force set, using the model's compliance data (or the defaults when it has none).
+   */
+  compliant?: boolean;
+}
+
+export function analyse(m: Model, opts: AnalyseOptions = {}): EndAnalysis[] {
   const out: EndAnalysis[] = [];
   for (const end of ['front', 'rear'] as const) {
     const data = m[end];
     if (!data) continue;
     const corner = new Corner(data, end);
+    if (opts.compliant) makeCompliant(corner, m.compliance ?? defaultCompliance());
     out.push({
       end,
       corner,

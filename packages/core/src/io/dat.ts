@@ -7,15 +7,21 @@
  */
 import type { Vec3 } from '../math/vec3.js';
 import { parseTemplateLines, templateLines } from '../template/file.js';
+import { getTemplate } from '../template/registry.js';
+import { dataPoints, type Template } from '../template/types.js';
+import {
+  CLAUDUS_COMPLIANCE_SECTION, claudusComplianceLines, complianceLines, parseClaudusCompliance, parseCompliance, type PointOrder,
+} from '../compliance/io.js';
+import { defaultCompliance, type ComplianceData } from '../compliance/types.js';
 import { defaultParams, type Model, type PointGroup, type RawSection, type SuspensionData, type VehicleParams } from '../model/types.js';
 
 export const KNOWN_SECTIONS = [
   'VERSION', 'PARAMETERS', 'FRONT SUSPENSION', 'REAR SUSPENSION', 'TOLERANCES', 'TITLES', 'TYRE', 'BODY',
   'FORMULA', 'ROLL SOLUTION', 'GROUPS', 'COMPLIANCE', 'FORCES', 'FSETS', 'RAVEN_DEFAULTS', 'EXTENDED BUMP',
-  'COMBINED', 'USER LINES', 'USER TEMPLATES',
+  'COMBINED', 'USER LINES', 'USER TEMPLATES', 'CLAUDUS COMPLIANCE',
 ] as const;
 
-const PARSED = new Set(['VERSION', 'PARAMETERS', 'FRONT SUSPENSION', 'REAR SUSPENSION', 'TOLERANCES', 'TITLES', 'TYRE', 'ROLL SOLUTION', 'GROUPS', 'USER TEMPLATES']);
+const PARSED = new Set(['VERSION', 'PARAMETERS', 'FRONT SUSPENSION', 'REAR SUSPENSION', 'TOLERANCES', 'TITLES', 'TYRE', 'ROLL SOLUTION', 'GROUPS', 'USER TEMPLATES', 'CLAUDUS COMPLIANCE']);
 
 const nums = (line: string | undefined): number[] =>
   (line ?? '').trim() === '' ? [] : (line as string).trim().split(/[\s,]+/).map((s) => Number(s.replace(/[dD]/, 'E')));
@@ -105,21 +111,76 @@ export function readDat(text: string): Model {
   const re = get('REAR SUSPENSION');
   const titles = get('TITLES');
   const titleCount = titles ? nums(titles.lines[0])[0] ?? 0 : 0;
+  const templates = get('USER TEMPLATES') ? parseTemplateLines(get('USER TEMPLATES')!.lines, 'file') : undefined;
+  const front = fr && fr.lines.some((l) => l.trim()) ? parseSuspension(fr.lines) : undefined;
+  const rear = re && re.lines.some((l) => l.trim()) ? parseSuspension(re.lines) : undefined;
+  const compliance = readCompliance(get('COMPLIANCE')?.lines, get(CLAUDUS_COMPLIANCE_SECTION)?.lines, pointOrder({ front, rear, templates }));
   return {
     version: nums(version.lines[0]),
     versionExtra: version.lines.slice(1),
     params: parseParams(params.lines),
-    front: fr && fr.lines.some((l) => l.trim()) ? parseSuspension(fr.lines) : undefined,
-    rear: re && re.lines.some((l) => l.trim()) ? parseSuspension(re.lines) : undefined,
+    front,
+    rear,
     tolerances: get('TOLERANCES')?.lines.flatMap(nums) ?? [],
     titles: titles ? titles.lines.slice(1, 1 + titleCount) : [],
     tyreWidths: get('TYRE')?.lines.flatMap(nums) ?? [150, 150, 150, 150],
     rollSolution: nums(get('ROLL SOLUTION')?.lines[0])[0] ?? 1,
     groups: get('GROUPS') ? parseGroups(get('GROUPS')!.lines) : [],
-    ...(get('USER TEMPLATES') ? { templates: parseTemplateLines(get('USER TEMPLATES')!.lines, 'file') } : {}),
+    ...(templates ? { templates } : {}),
+    ...(compliance ? { compliance } : {}),
     sectionOrder: sections.map((s) => s.name),
     raw: sections.filter((s) => !PARSED.has(s.name)),
   };
+}
+
+// ---- compliance ----------------------------------------------------------------------------------
+
+/** Compliance data exactly as read from SHARK's section, so an unedited file writes back unchanged. */
+const pristine = new WeakMap<ComplianceData, string>();
+
+function templateFor(slot: number, own?: Template[]): Template | undefined {
+  try {
+    return own?.find((t) => t.slot === slot) ?? getTemplate(slot);
+  } catch {
+    return undefined;
+  }
+}
+
+/** Each end's data point numbers in file order, which SHARK's compliance indexes refer to. */
+function pointOrder(m: Pick<Model, 'front' | 'rear' | 'templates'>): PointOrder {
+  const order: PointOrder = {};
+  for (const end of ['front', 'rear'] as const) {
+    const s = m[end];
+    const t = s && templateFor(s.templateSlot, m.templates);
+    if (t) order[end] = dataPoints(t).map((p) => p.no);
+  }
+  return order;
+}
+
+function readCompliance(shark: string[] | undefined, claudus: string[] | undefined, order: PointOrder): ComplianceData | undefined {
+  if (!shark && !claudus) return undefined;
+  let data = defaultCompliance();
+  try {
+    if (shark) data = parseCompliance(shark, order, data);
+  } catch {
+    // Keep the raw section and fall back to defaults if the layout is not what we expect.
+  }
+  if (claudus) data = parseClaudusCompliance(claudus, data);
+  else pristine.set(data, JSON.stringify(data));
+  return data;
+}
+
+/** True when the compliance data still matches what came from the file's own COMPLIANCE section. */
+const unedited = (c: ComplianceData) => pristine.get(c) === JSON.stringify(c);
+
+function positions(m: Model, order: PointOrder) {
+  const out: { front?: Map<number, Vec3>; rear?: Map<number, Vec3> } = {};
+  for (const end of ['front', 'rear'] as const) {
+    const s = m[end];
+    const nos = order[end];
+    if (s && nos) out[end] = new Map(nos.map((no, i) => [no, s.points[i]]));
+  }
+  return out;
 }
 
 // ---- writing -------------------------------------------------------------------------------------
@@ -150,6 +211,9 @@ export function writeDat(m: Model): string {
   if (m.front) ensure('FRONT SUSPENSION', 'PARAMETERS');
   if (m.rear) ensure('REAR SUSPENSION', m.front ? 'FRONT SUSPENSION' : 'PARAMETERS');
   if (m.templates?.length && !order.includes('USER TEMPLATES')) order.push('USER TEMPLATES');
+  const c = m.compliance;
+  if (c && !order.includes('COMPLIANCE')) order.push('COMPLIANCE');
+  if (c && !unedited(c) && !order.includes(CLAUDUS_COMPLIANCE_SECTION)) order.splice(order.indexOf('COMPLIANCE') + 1, 0, CLAUDUS_COMPLIANCE_SECTION);
   for (const name of order) {
     const body: string[] = [];
     switch (name) {
@@ -190,6 +254,19 @@ export function writeDat(m: Model): string {
       case 'USER TEMPLATES':
         if (!m.templates?.length) continue;
         body.push(...templateLines(m.templates));
+        break;
+      case 'COMPLIANCE': {
+        const raw = m.raw.find((r) => r.name === name);
+        if (c && !(raw && unedited(c))) {
+          const po = pointOrder(m);
+          body.push(...complianceLines(c, po, positions(m, po)));
+        } else if (raw) body.push(...raw.lines);
+        else continue;
+        break;
+      }
+      case CLAUDUS_COMPLIANCE_SECTION:
+        if (!c || unedited(c)) continue;
+        body.push(...claudusComplianceLines(c));
         break;
       case 'GROUPS':
         body.push(int(m.groups.length));
