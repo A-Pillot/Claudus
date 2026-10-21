@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useApp, type ComplianceDialogId } from '../store';
 import { useLab, type PanelId } from '../lab';
+import { useListings, type ListingId } from './Listings';
 
 function useMenu() {
   const [open, setOpen] = useState(false);
@@ -40,6 +41,7 @@ export function ComplianceMenus() {
   const show = (id: ComplianceDialogId, m: ReturnType<typeof useMenu>) => () => { m.setOpen(false); setDialog(id); };
   const setPanel = useLab((s) => s.setPanel);
   const panel = (id: PanelId) => () => { res.setOpen(false); setPanel(id, true); };
+  const listing = (id: ListingId) => () => { res.setOpen(false); useListings.getState().setOpen(id); };
   return (
     <>
       <button className={compliant ? 'on' : ''} aria-pressed={compliant} title="Solve with compliance (bushes, springs, tyres and external forces)" onClick={() => setCompliant(!compliant)}>
@@ -64,7 +66,19 @@ export function ComplianceMenus() {
         <button onClick={() => res.setOpen(!res.open)} className={res.open ? 'on' : ''}>Results ▾</button>
         {res.open && (
           <div className="menulist" role="menu">
+            <button onClick={listing('splineFits')}>List SDF spline fits…</button>
+            <button onClick={listing('splineData')}>List SDF spline data…</button>
+            <hr />
+            <button disabled={!compliant} onClick={listing('bushDeflections')}>List bush deflections…</button>
+            <button disabled={!compliant} onClick={listing('bushRotations')}>List joint/bush rotations…</button>
+            <button disabled={!compliant} onClick={listing('bushForces')}>List bush forces…</button>
+            <hr />
+            <button onClick={listing('pointsUser')}>List all point coords for user position…</button>
+            <button onClick={listing('pointAll')}>List a point's coords at all positions…</button>
+            <button onClick={listing('pointsAt')}>List all point coords at a position…</button>
+            <hr />
             <button onClick={show('coefficients', res)}>Compliance coefficients…</button>
+            <button disabled={!compliant} onClick={listing('ballRotations')}>Ball joint rotations…</button>
             <button disabled={!compliant} onClick={show('joints', res)}>Joint deflections and forces…</button>
             <button disabled={!compliant} onClick={show('loads', res)}>Spring and tyre loads…</button>
             <hr />

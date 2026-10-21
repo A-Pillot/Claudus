@@ -2,8 +2,9 @@
  * Combined motion profile and extended bump list: defaults, text layout of the COMBINED and EXTENDED BUMP
  * file sections, and the bump positions a sweep runs through.
  *
- * The layout is read strictly (the sample files have neither section). A section that does not match is
- * kept as raw text and written back unchanged.
+ * SHARK's layout is not known (the sample files have neither section), so this is a best guess, read strictly.
+ * SHARK's own sections are never rewritten; edited data goes to CLAUDUS COMBINED / CLAUDUS EXTENDED BUMP, which use
+ * the same layout.
  *   COMBINED:       N, then N lines of "bump rack".
  *   EXTENDED BUMP:  "use N", then N lines of "bump label".
  */

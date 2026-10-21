@@ -37,19 +37,29 @@ describe('COMBINED and EXTENDED BUMP sections', () => {
     const out = writeDat(readDat(text));
     expect(block(out, 'COMBINED')).toEqual(comb);
     expect(block(out, 'EXTENDED BUMP')).toEqual(ext);
+    expect(out).not.toContain('CLAUDUS COMBINED');
   });
 
   it('writes an edited profile and reads it back', () => {
     const m = readDat(withSections('type1.dat', [...comb, ...ext]));
     const edited: Model = { ...m, combined: { steps: [...m.combined!.steps, { bump: 1, rack: 2 }] }, extendedBump: { use: false, steps: [{ bump: 3, label: 'x y' }] } };
-    const back = readDat(writeDat(edited));
+    const out = writeDat(edited);
+    // SHARK's own sections stay exactly as read; the edits go to Claudus sections.
+    expect(block(out, 'COMBINED')).toEqual(comb);
+    expect(block(out, 'EXTENDED BUMP')).toEqual(ext);
+    expect(out).toContain('CLAUDUS COMBINED');
+    expect(out).toContain('CLAUDUS EXTENDED BUMP');
+    const back = readDat(out);
     expect(back.combined).toEqual(edited.combined);
     expect(back.extendedBump).toEqual(edited.extendedBump);
   });
 
   it('adds the sections to a file that has none', () => {
     const m = sampleModel('type1.dat');
-    const back = readDat(writeDat({ ...m, combined: defaultCombined(m.params), extendedBump: { use: true, steps: [{ bump: 5, label: '' }] } }));
+    const out = writeDat({ ...m, combined: defaultCombined(m.params), extendedBump: { use: true, steps: [{ bump: 5, label: '' }] } });
+    expect(out).not.toMatch(/^COMBINED/m);
+    expect(out).not.toMatch(/^EXTENDED BUMP/m);
+    const back = readDat(out);
     expect(back.combined?.steps).toHaveLength(11);
     expect(back.extendedBump?.use).toBe(true);
   });

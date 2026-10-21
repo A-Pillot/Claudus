@@ -21,10 +21,10 @@ import { defaultParams, type Model, type PointGroup, type RawSection, type Suspe
 export const KNOWN_SECTIONS = [
   'VERSION', 'PARAMETERS', 'FRONT SUSPENSION', 'REAR SUSPENSION', 'TOLERANCES', 'TITLES', 'TYRE', 'BODY',
   'FORMULA', 'ROLL SOLUTION', 'GROUPS', 'COMPLIANCE', 'FORCES', 'FSETS', 'RAVEN_DEFAULTS', 'EXTENDED BUMP',
-  'COMBINED', 'USER LINES', 'USER TEMPLATES', 'CLAUDUS COMPLIANCE', 'CLAUDUS LIMITS', 'CLAUDUS STEERING',
+  'COMBINED', 'USER LINES', 'USER TEMPLATES', 'CLAUDUS COMPLIANCE', 'CLAUDUS LIMITS', 'CLAUDUS STEERING', 'CLAUDUS COMBINED', 'CLAUDUS EXTENDED BUMP',
 ] as const;
 
-const PARSED = new Set(['VERSION', 'PARAMETERS', 'FRONT SUSPENSION', 'REAR SUSPENSION', 'TOLERANCES', 'TITLES', 'TYRE', 'ROLL SOLUTION', 'GROUPS', 'USER TEMPLATES', 'CLAUDUS COMPLIANCE', 'CLAUDUS LIMITS', 'CLAUDUS STEERING']);
+const PARSED = new Set(['VERSION', 'PARAMETERS', 'FRONT SUSPENSION', 'REAR SUSPENSION', 'TOLERANCES', 'TITLES', 'TYRE', 'ROLL SOLUTION', 'GROUPS', 'USER TEMPLATES', 'CLAUDUS COMPLIANCE', 'CLAUDUS LIMITS', 'CLAUDUS STEERING', 'CLAUDUS COMBINED', 'CLAUDUS EXTENDED BUMP']);
 
 const nums = (line: string | undefined): number[] =>
   (line ?? '').trim() === '' ? [] : (line as string).trim().split(/[\s,]+/).map((s) => Number(s.replace(/[dD]/, 'E')));
@@ -118,9 +118,10 @@ export function readDat(text: string): Model {
   const front = fr && fr.lines.some((l) => l.trim()) ? parseSuspension(fr.lines) : undefined;
   const rear = re && re.lines.some((l) => l.trim()) ? parseSuspension(re.lines) : undefined;
   const compliance = readCompliance(get('COMPLIANCE')?.lines, get(CLAUDUS_COMPLIANCE_SECTION)?.lines, pointOrder({ front, rear, templates }));
-  // COMBINED and EXTENDED BUMP stay in `raw` too, so an unedited section is written back byte for byte.
-  const combined = parseCombined(get('COMBINED')?.lines);
-  const extendedBump = parseExtendedBump(get('EXTENDED BUMP')?.lines);
+  // SHARK's COMBINED and EXTENDED BUMP stay in `raw` and are never rewritten (their layout is not known for
+  // sure). Claudus's own sections win when present; otherwise our best-guess parse of SHARK's shows the data.
+  const combined = parseCombined(get('CLAUDUS COMBINED')?.lines) ?? parseCombined(get('COMBINED')?.lines);
+  const extendedBump = parseExtendedBump(get('CLAUDUS EXTENDED BUMP')?.lines) ?? parseExtendedBump(get('EXTENDED BUMP')?.lines);
   const limits = parseLimits(get('CLAUDUS LIMITS')?.lines);
   const steering = parseSteering(get('CLAUDUS STEERING')?.lines);
   return {
@@ -223,8 +224,14 @@ export function writeDat(m: Model): string {
   if (m.front) ensure('FRONT SUSPENSION', 'PARAMETERS');
   if (m.rear) ensure('REAR SUSPENSION', m.front ? 'FRONT SUSPENSION' : 'PARAMETERS');
   if (m.templates?.length && !order.includes('USER TEMPLATES')) order.push('USER TEMPLATES');
-  if (m.combined && !order.includes('COMBINED')) order.push('COMBINED');
-  if (m.extendedBump && !order.includes('EXTENDED BUMP')) order.push('EXTENDED BUMP');
+  // Edited profiles go to Claudus-only sections; a profile that is just what SHARK's section holds needs none.
+  const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+  const sharkC = parseCombined(m.raw.find((r) => r.name === 'COMBINED')?.lines);
+  const sharkE = parseExtendedBump(m.raw.find((r) => r.name === 'EXTENDED BUMP')?.lines);
+  const writeC = !!m.combined && !same(m.combined, sharkC);
+  const writeE = !!m.extendedBump && !same(m.extendedBump, sharkE);
+  if (writeC && !order.includes('CLAUDUS COMBINED')) order.push('CLAUDUS COMBINED');
+  if (writeE && !order.includes('CLAUDUS EXTENDED BUMP')) order.push('CLAUDUS EXTENDED BUMP');
   if (m.limits && !order.includes('CLAUDUS LIMITS')) order.push('CLAUDUS LIMITS');
   if (m.steering && !order.includes('CLAUDUS STEERING')) order.push('CLAUDUS STEERING');
   const c = m.compliance;
@@ -284,17 +291,14 @@ export function writeDat(m: Model): string {
         if (!c || unedited(c)) continue;
         body.push(...claudusComplianceLines(c));
         break;
-      case 'COMBINED':
-      case 'EXTENDED BUMP': {
-        const raw = m.raw.find((r) => r.name === name);
-        const isC = name === 'COMBINED';
-        const obj = isC ? m.combined : m.extendedBump;
-        if (obj && !(raw && JSON.stringify(isC ? parseCombined(raw.lines) : parseExtendedBump(raw.lines)) === JSON.stringify(obj)))
-          body.push(...(isC ? combinedLines(m.combined!) : extendedBumpLines(m.extendedBump!)));
-        else if (raw) body.push(...raw.lines);
-        else continue;
+      case 'CLAUDUS COMBINED':
+        if (!writeC) continue;
+        body.push(...combinedLines(m.combined!));
         break;
-      }
+      case 'CLAUDUS EXTENDED BUMP':
+        if (!writeE) continue;
+        body.push(...extendedBumpLines(m.extendedBump!));
+        break;
       case 'CLAUDUS STEERING':
         if (!m.steering) continue;
         body.push(...steeringLines(m.steering));
