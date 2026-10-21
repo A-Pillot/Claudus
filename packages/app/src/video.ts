@@ -170,3 +170,4 @@ export async function makeVideo(o: VideoOptions, onProgress: (done: number, tota
     if (o.source.kind === 'sweep') useApp.getState().setArt(saved);
   }
 }
+export const getCanvas = () => glCanvas;

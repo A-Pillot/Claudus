@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { analyse, complianceAt, Corner, defaultCompliance, makeCompliant, solveAxle, type AxleState, type ComplianceData, type ComplianceResult, type EndAnalysis, type Model } from '@claudus/core';
-import { useApp } from './store';
+import { isEditing, useApp } from './store';
 
 /**
  * The compliance data the solver uses: the model's own (or the defaults), with every external force switched
@@ -90,15 +90,19 @@ export function useAnalysis(): AnalysisState {
   const compliant = useApp((s) => s.compliant);
   const comp = useEffectiveCompliance();
   const [state, setState] = useState<AnalysisState>({ busy: true });
+  const lastRun = useRef(0);
   useEffect(() => {
     setState((s) => ({ ...s, busy: true }));
+    // While a point is being dragged the graphs refresh about three times a second instead of waiting for a pause.
+    const live = isEditing() && Date.now() - lastRun.current > 300;
     const t = setTimeout(() => {
+      lastRun.current = Date.now();
       try {
         setState({ results: analyse(compliant ? { ...model, compliance: comp } : model, { compliant }), model, busy: false });
       } catch (e) {
         setState({ busy: false, error: (e as Error).message });
       }
-    }, 250);
+    }, live ? 0 : 250);
     return () => clearTimeout(t);
   }, [model, templatesRev, compliant, comp]);
   return state;

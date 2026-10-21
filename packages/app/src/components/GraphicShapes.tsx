@@ -3,6 +3,7 @@ import { Html, Line } from '@react-three/drei';
 import * as THREE from 'three';
 import { elementShape, optionOf, type Corner, type GraphicElement, type Shape, type Vec3 } from '@claudus/core';
 import { useApp } from '../store';
+import { useViewCtl } from '../viewCtl';
 
 const PART_COLOURS = ['#4e79a7', '#f28e2b', '#59a14f', '#b07aa1', '#76b7b2', '#edc948', '#9c755f', '#e15759'];
 const PICKED = '#ffe066';
@@ -43,6 +44,8 @@ export function GraphicElements({ corner, points, interactive, only }: Props) {
   const t = corner.template;
   const selectedGraphic = useApp((s) => s.selectedGraphic);
   const addMode = useApp((s) => s.addMode);
+  const showPivots = useViewCtl((s) => s.showPivots);
+  const lineSize = useViewCtl((s) => s.lineSize);
   const at = (no: number) => {
     const i = corner.mech.index.get(no);
     return i === undefined ? undefined : points[i];
@@ -59,6 +62,7 @@ export function GraphicElements({ corner, points, interactive, only }: Props) {
         if (only && !only(g)) return null;
         const shape = elementShape(g, at);
         if (!shape) return null;
+        if (shape.type === 'pivot' && !showPivots) return null;
         const picked = interactive && selectedGraphic === i;
         const colour = picked ? PICKED : shape.type === 'segments' ? PART_COLOURS[(partOf(g.points) - 1 + PART_COLOURS.length) % PART_COLOURS.length] : shape.type === 'measure' ? MEASURE : MISC;
         const click = interactive
@@ -69,7 +73,7 @@ export function GraphicElements({ corner, points, interactive, only }: Props) {
           : undefined;
         return (
           <group key={i}>
-            <ShapeMesh shape={shape} colour={colour} onClick={click} />
+            <ShapeMesh shape={shape} colour={colour} onClick={click} lineSize={lineSize} />
             {interactive && <ShapeLabel g={g} shape={shape} colour={colour} />}
           </group>
         );
@@ -94,14 +98,14 @@ function Bar({ a, b, radius, colour, opacity = 0, onClick }: { a: Vec3; b: Vec3;
   );
 }
 
-function ShapeMesh({ shape, colour, onClick }: { shape: Shape; colour: string; onClick: Click }) {
+function ShapeMesh({ shape, colour, onClick, lineSize }: { shape: Shape; colour: string; onClick: Click; lineSize: number }) {
   switch (shape.type) {
     case 'segments':
       return (
         <>
           {shape.segments.map(([a, b], k) => (
             <group key={k}>
-              <Line points={[a, b]} color={colour} lineWidth={shape.style === 'tube' ? 4 : 2.5} />
+              <Line points={[a, b]} color={colour} lineWidth={(shape.style === 'tube' ? 4 : 2.5) * lineSize} />
               <Bar a={a} b={b} radius={9} colour={colour} onClick={onClick} />
             </group>
           ))}

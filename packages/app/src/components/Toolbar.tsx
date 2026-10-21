@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { DatParseError, formatSdf, isTwoDText, listTemplates, newModel, readDat, readTwoD, TwoDParseError, writeDat, writeTwoD, type End, type TwoDType } from '@claudus/core';
 import type { AnalysisState } from '../derived';
 import { useApp } from '../store';
@@ -12,6 +12,7 @@ import { ComplianceMenus } from './ComplianceMenu';
 import { GraphsMenu } from './GraphsMenu';
 import { RideHeightMenu } from './RideHeightMenu';
 import { ViewMenu } from './ViewMenu';
+import { EditMenu } from './EditMenu';
 
 export function Toolbar({ analysis }: { analysis: AnalysisState }) {
   const { model, fileName, dirty, end, setModel, setEnd, markSaved } = useApp();
@@ -46,6 +47,14 @@ export function Toolbar({ analysis }: { analysis: AnalysisState }) {
     const name = await files().save(fileName, writeDat({ ...model, templates: templatesForModel(model) }));
     if (name) markSaved(name);
   };
+  // Ctrl+S saves the file instead of the browser's save-page dialog.
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); void save(); }
+    };
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  });
   const exportSdf = async () => {
     if (!analysis.results || !analysis.model) return;
     await files().save(fileName.replace(/\.dat$/i, '') + '.sdf', formatSdf(analysis.model, analysis.results, fileName));
@@ -58,6 +67,7 @@ export function Toolbar({ analysis }: { analysis: AnalysisState }) {
       <button onClick={open}>Open…</button>
       <button onClick={save}>Save</button>
       {!two && <button onClick={exportSdf} disabled={!analysis.results || analysis.busy}>Export SDF</button>}
+      {!two && <EditMenu />}
       {!two && <ViewMenu />}
       {!two && <TemplateMenu onError={setError} />}
       {!two && <GraphicsMenu />}

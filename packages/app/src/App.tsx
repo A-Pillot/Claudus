@@ -10,6 +10,7 @@ import { Viewer3D } from './components/Viewer3D';
 import { ArticulationBar } from './components/ArticulationBar';
 import { Readouts } from './components/Readouts';
 import { Graphs } from './components/Graphs';
+import { ViewTools } from './components/ViewControls';
 import { AddBanner } from './components/GraphicsMenu';
 import { GroupsPanel } from './components/GroupsPanel';
 import { SdfView } from './components/SdfView';
@@ -65,6 +66,7 @@ export function App() {
           <>
             <ErrorBoundary resetKey={revision}><Viewer3D corner={corner} state={shown.state ?? state} detail={detail} ghosts={shown.ghosts} freeBody={freeBody} /></ErrorBoundary>
             <AddBanner />
+            <ViewTools />
             {compliant && <div className="overlay badge">Compliant solution</div>}
             {shown.caption && <div className="overlay caption" data-testid="display-caption">{shown.caption}</div>}
             <DisplayModeBar modal={modal} corner={corner} />
