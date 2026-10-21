@@ -17,6 +17,8 @@ export interface EngineState {
   setActive: (a: boolean) => void;
   model: EngineModel | null;
   fileName: string | null;
+  /** Bumps when a model is loaded (canvas re-fits). */
+  loadCount: number;
   dirty: boolean;
   results: SweepResult | null;
   /** Earlier result sets kept for overlay in the graphs. */
@@ -54,6 +56,7 @@ export const useEngine = create<EngineState>((set, get) => ({
   setActive: (active) => set({ active }),
   model: null,
   fileName: null,
+  loadCount: 0,
   dirty: false,
   results: null,
   overlays: [],
@@ -67,6 +70,7 @@ export const useEngine = create<EngineState>((set, get) => ({
   setModel: (model, fileName) =>
     set((s) => ({
       model,
+      loadCount: s.loadCount + 1,
       fileName: fileName === undefined ? s.fileName : fileName,
       history: emptyHistory<EngineModel>(),
       selection: [],

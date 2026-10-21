@@ -89,10 +89,10 @@ describe('connectivity check', () => {
     expect(errs.some((e) => /end 2 is not connected/.test(e.message) && e.key === 'pipe:2')).toBe(true);
     expect(errs.some((e) => e.key === 'exit:1')).toBe(true);
   });
-  it('flags a pipe end connected twice', () => {
+  it('allows several connections on one pipe end (junction as in .sim files)', () => {
     const m = network();
-    addConnection(m, { kind: 'pipe', id: 1, end: 1 }, { kind: 'plenum', id: 9 });
-    expect(checkModel(m).some((i) => /connected 2 times/.test(i.message))).toBe(true);
+    addConnection(m, { kind: 'pipe', id: 1, end: 1 }, { kind: 'pipe', id: 2, end: 2 });
+    expect(checkModel(m).filter((i) => i.severity === 'error')).toEqual([]);
   });
 });
 

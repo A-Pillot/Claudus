@@ -11,8 +11,10 @@ export const HALF: Record<ElementKind, { w: number; h: number }> = {
   turbine: { w: 24, h: 24 }, cooler: { w: 16, h: 24 },
 };
 
-const COL = 150;
-const ROW = 90;
+/** Pixels per layout unit. .sim BUILDER coordinates are grid cells. */
+export const S = 50;
+const COL = 3;
+const ROW = 2;
 
 /** Default column (relative to the cylinders, which sit at 0) when connectivity gives no hint. */
 const KIND_COL: Partial<Record<ElementKind, number>> = { inlet: -4, throttle: -3, plenum: -2, pipe: -1, compressor: -2, turbine: 2, exit: 4, cylinder: 0 };
@@ -74,7 +76,7 @@ export function autoLayout(model: EngineModel, force = false): Record<Key, Pt> {
     arr.push(it.key);
     cols.set(c, arr);
   }
-  const x0 = 160 + 3 * COL;
+  const x0 = 4 + 4 * COL;
   for (const [c, keys] of cols) {
     keys.sort((a, b) => {
       const pa = parseInt(a.split(':')[1], 10);
@@ -84,7 +86,7 @@ export function autoLayout(model: EngineModel, force = false): Record<Key, Pt> {
     const total = (keys.length - 1) * ROW;
     keys.forEach((k, i) => {
       const existing = model.layout[k];
-      out[k] = !force && existing ? existing : { x: x0 + c * COL, y: 200 + i * ROW - total / 2 + (c === 0 ? 0 : 0) };
+      out[k] = !force && existing ? existing : { x: x0 + c * COL, y: 6 + i * ROW - total / 2 };
     });
   }
   return out;
@@ -98,8 +100,21 @@ export function isViaOnly(model: EngineModel, kind: ElementKind, id: number): bo
   return model.connections.some((c) => c.via.some((v) => refKey(v) === k));
 }
 
-/** Fill in any missing layout positions (returns a new layout object). */
+/** True when the stored positions are unusable: missing, all stacked, or many elements overlapping. */
+export function isDegenerate(model: EngineModel): boolean {
+  const nodes = allItems(model).filter((i) => !isViaOnly(model, i.kind, i.id));
+  const pts = nodes.map((n) => model.layout[n.key]).filter((p): p is Pt => !!p);
+  if (pts.length < 2) return false;
+  let close = 0;
+  for (let i = 0; i < pts.length; i++) for (let j = i + 1; j < pts.length; j++) {
+    if (Math.abs(pts[i].x - pts[j].x) < 0.5 && Math.abs(pts[i].y - pts[j].y) < 0.5) close++;
+  }
+  return close > Math.max(1, pts.length / 6);
+}
+
+/** Layout (in layout units) with any missing positions filled in; falls back to auto-layout if degenerate. */
 export function ensureLayout(model: EngineModel): Record<Key, Pt> {
+  if (isDegenerate(model)) return autoLayout(model, true);
   const auto = autoLayout(model);
   const out: Record<Key, Pt> = { ...model.layout };
   const missing = Object.keys(auto).filter((k) => !model.layout[k]);
@@ -107,10 +122,9 @@ export function ensureLayout(model: EngineModel): Record<Key, Pt> {
     for (const k of missing) out[k] = auto[k];
     return out;
   }
-  // Partly laid out: place only the newcomers, stacked below what exists.
   let maxY = 0;
   for (const p of Object.values(model.layout)) maxY = Math.max(maxY, p.y);
-  missing.forEach((k, i) => { out[k] = { x: auto[k].x, y: maxY + ROW + i * 20 }; });
+  missing.forEach((k, i) => { out[k] = { x: auto[k].x, y: maxY + ROW + i * 0.5 }; });
   return out;
 }
 

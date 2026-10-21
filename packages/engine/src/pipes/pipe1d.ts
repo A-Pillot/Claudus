@@ -148,12 +148,15 @@ export class Pipe1D {
   }
 
   maxStableDt(cfl = 0.7): number {
-    this.toPrim(this.q0, this.q1, this.q2, this.q3);
+    const g = this.g, gm1 = g - 1;
     let s = 1e-9;
-    const g = this.g;
     for (let i = 0; i < this.n; i++) {
-      const a = Math.sqrt((g * this.p[i]) / this.rho[i]) + Math.abs(this.u[i]);
-      if (a > s) s = a;
+      const r = this.q0[i];
+      const u = this.q1[i] / r;
+      let p = gm1 * (this.q2[i] - 0.5 * r * u * u);
+      if (!(p > 1e2)) p = 1e2;
+      const w = Math.sqrt((g * p) / (r > 1e-6 ? r : 1e-6)) + Math.abs(u);
+      if (w > s) s = w;
     }
     return (cfl * this.dx) / s;
   }
@@ -238,6 +241,8 @@ export class Pipe1D {
   private sources(dt: number): void {
     const g = this.g;
     const cf = this.Cf;
+    const St = cf / 2 / Math.pow(PR_AIR, 2 / 3);
+    const ht = this.ht && cf > 0;
     for (let i = 0; i < this.n; i++) {
       const rho = this.q0[i];
       const u = this.q1[i] / rho;
@@ -246,13 +251,13 @@ export class Pipe1D {
         const un = u / (1 + (2 * cf * au * dt) / this.Dc[i]);
         this.q1[i] = rho * un; // total energy unchanged: dissipation heats the gas
       }
-      if (this.ht && au > 0) {
+      if (ht && au > 0) {
         const uu = this.q1[i] / rho;
         const e = this.q2[i] - 0.5 * rho * uu * uu;
         const T = ((g - 1) * e) / (rho * this.R);
-        const St = cf / 2 / Math.pow(PR_AIR, 2 / 3);
         const k = (4 * St * Math.abs(uu) * g) / this.Dc[i];
-        const dT = (this.Tw - T) * (1 - Math.exp(-k * dt));
+        const kd = k * dt;
+        const dT = ((this.Tw - T) * kd) / (1 + kd);
         this.q2[i] += (rho * this.R * dT) / (g - 1);
       }
     }
@@ -393,6 +398,23 @@ export class Pipe1D {
     if (!(x > 0) || !Number.isFinite(x)) x = pc;
     if (x < pLo) x = pLo; else if (x > pHi) x = pHi;
     let hx = h(x);
+    // fast path: safeguarded secant from the warm start (ev is left valid at the returned point)
+    if (Math.abs(hx) <= 2e-3 * ev.hscale) { this.finishFace(x, out, A, nb, yc); return; }
+    {
+      let x0 = x, h0 = hx;
+      let x1 = x * (hx > 0 ? 1.01 : 0.99);
+      if (x1 > pHi) x1 = pHi; else if (x1 < pLo) x1 = pLo;
+      let h1 = h(x1);
+      for (let it = 0; it < 7; it++) {
+        if (Math.abs(h1) <= 2e-3 * ev.hscale) { this.finishFace(x1, out, A, nb, yc); return; }
+        if (h1 === h0) break;
+        let x2 = x1 - (h1 * (x1 - x0)) / (h1 - h0);
+        if (!(x2 > pLo)) x2 = pLo; else if (x2 > pHi) x2 = pHi;
+        const h2 = h(x2);
+        if (Math.abs(h2) <= 2e-3 * ev.hscale || Math.abs(x2 - x1) < 3e-5 * x2) { this.finishFace(x2, out, A, nb, yc); return; }
+        x0 = x1; h0 = h1; x1 = x2; h1 = h2;
+      }
+    }
     let xa = x, ha = hx, xb = x, hb = hx;
     if (hx !== 0) {
       let step = 1.02;
@@ -417,8 +439,14 @@ export class Pipe1D {
       }
     }
     const pf = ha >= 0 && hb <= 0 ? 0.5 * (xa + xb) : Math.abs(ha) < Math.abs(hb) ? xa : xb;
-    this.pfGuess[this.curEnd] = pf;
     h(pf);
+    this.finishFace(pf, out, A, nb, yc);
+  }
+
+  /** Store the solution and fill the flux; ev must hold the state evaluated at pf. */
+  private finishFace(pf: number, out: { mdot: number; mom: number; en: number; ys: number }, A: number, nb: NodeBoundary, yc: number): void {
+    const ev = this.ev;
+    this.pfGuess[this.curEnd] = pf;
     out.mdot = ev.mIn;
     out.mom = ev.mIn * ev.uf + ev.pf * A;
     out.en = ev.mIn * ev.h0;
@@ -428,7 +456,7 @@ export class Pipe1D {
   private readonly ev = {
     pc: 0, rc: 0, uc: 0, A: 0, Ae: 0, ac: 0,
     nb: null as unknown as NodeBoundary,
-    mIn: 0, uf: 0, h0: 0, pf: 0, p0: 0, pSonIn: 0, pSonOut: 0,
+    mIn: 0, uf: 0, h0: 0, pf: 0, hres: 0, hscale: 1, p0: 0, pSonIn: 0, pSonOut: 0,
   };
   private readonly pfGuess = new Float64Array(2).fill(NaN);
   private curEnd = 0;
@@ -483,7 +511,9 @@ export class Pipe1D {
     }
     ev.uf = uf;
     ev.pf = pf;
-    return N - ev.mIn;
+    ev.hres = N - ev.mIn;
+    ev.hscale = (N < 0 ? -N : N) + (ev.mIn < 0 ? -ev.mIn : ev.mIn) + 1e-6 * ev.A;
+    return ev.hres;
   }
 
   sample(xFraction: number): { p: number; T: number; u: number; rho: number; burnt: number } {

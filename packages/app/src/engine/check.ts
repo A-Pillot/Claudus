@@ -39,7 +39,6 @@ export function checkModel(model: EngineModel): Issue[] {
     for (const end of [1, 2] as const) {
       const n = used.get(`pipe:${p.id}:${end}`) ?? 0;
       if (n === 0) err(`${p.label}: end ${end} is not connected.`, k);
-      else if (n > 1) err(`${p.label}: end ${end} is connected ${n} times. Join three or more pipes with a junction.`, k);
     }
     if (!(p.length > 0)) err(`${p.label}: length must be positive.`, k);
     if (p.stations.length < 2) err(`${p.label}: needs at least two diameter stations.`, k);

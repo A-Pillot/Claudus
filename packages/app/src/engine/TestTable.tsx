@@ -37,7 +37,7 @@ export function TestTable() {
               <tr key={i} className={selected.includes(i) ? 'sel' : ''}>
                 <td className="rownum" onClick={(e) => toggle(i, e.ctrlKey || e.metaKey)}>{i + 1}</td>
                 <td><input className="txt" value={t.label} onChange={(e) => set(i, 'label', e.target.value)} /></td>
-                {COLS.map((c) => <td key={c.key}><NumField value={t[c.key]} step={c.step} onChange={(v) => set(i, c.key, v)} width={78} /></td>)}
+                {COLS.map((c) => <td key={c.key}><NumField value={t[c.key]} step={c.step} onChange={(v) => set(i, c.key, v)} width={96} /></td>)}
                 {model.throttles.map((th) => (
                   <td key={th.id}>
                     <NumField value={t.throttle?.[th.id] ?? th.position} onChange={(v) => edit((m) => { const tp = m.tests[i]; tp.throttle = { ...(tp.throttle ?? {}), [th.id]: v }; }, { key: `test.${i}.th${th.id}` })} width={64} />

@@ -1,8 +1,8 @@
 // SVG network canvas: draws the layout, supports select, drag, pan/zoom, palette drops and connecting.
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ElementKind, ElementRef, EngineModel } from '@claudus/engine';
 import { addConnection, addElement, allItems, itemMap, keyOf, parseKey, refKey, type Key } from './elements';
-import { anchor, ensureLayout, HALF, isViaOnly, route, type Pt } from './layout';
+import { anchor, autoLayout, ensureLayout, HALF, isViaOnly, route, S, type Pt } from './layout';
 import { useEngine } from './store';
 import { errorKeys, warnKeys, type Issue } from './check';
 
@@ -20,7 +20,13 @@ export function Canvas({ issues, tool, paletteKind, onPlaced }: { issues: Issue[
   const [drag, setDrag] = useState<null | { mode: 'move' | 'pan' | 'box' | 'connect'; start: Pt; last: Pt; from?: ElementRef; moved: boolean }>(null);
   const [cursor, setCursor] = useState<Pt>({ x: 0, y: 0 });
 
-  const layout = useMemo(() => ensureLayout(model), [model]);
+  const grid = useMemo(() => ensureLayout(model), [model]);
+  const layout = useMemo(() => {
+    const o: Record<Key, Pt> = {};
+    for (const [k, p] of Object.entries(grid)) o[k] = { x: p.x * S, y: p.y * S };
+    return o;
+  }, [grid]);
+  const loadCount = useEngine((s) => s.loadCount);
   const items = useMemo(() => allItems(model), [model]);
   const map = useMemo(() => itemMap(model), [model]);
   const bad = useMemo(() => errorKeys(issues), [issues]);
@@ -55,7 +61,7 @@ export function Canvas({ issues, tool, paletteKind, onPlaced }: { issues: Issue[
     }
     const p = toWorld(e);
     if (paletteKind) {
-      let pos = { x: Math.round(p.x / 10) * 10, y: Math.round(p.y / 10) * 10 };
+      const pos = { x: Math.round((p.x / S) * 2) / 2, y: Math.round((p.y / S) * 2) / 2 };
       let key = '';
       edit((m) => {
         m.layout = ensureLayout(m);
@@ -100,7 +106,7 @@ export function Canvas({ issues, tool, paletteKind, onPlaced }: { issues: Issue[
       edit((m) => {
         for (const k of useEngine.getState().selection) {
           const c = m.layout[k];
-          if (c) { c.x += dx; c.y += dy; }
+          if (c) { c.x += dx / S; c.y += dy / S; }
         }
       }, { noHistory: true });
       setDrag({ ...drag, last: p, moved: true });
@@ -120,7 +126,7 @@ export function Canvas({ issues, tool, paletteKind, onPlaced }: { issues: Issue[
     }
     if (drag.mode === 'connect' && drag.from) {
       const k = hit(p);
-      if (k && k !== refKey(drag.from)) connect(model, drag.from, refFor(k, p), layout);
+      if (k && k !== refKey(drag.from)) connect(model, drag.from, refFor(k, p), grid);
     }
     setDrag(null);
   };
@@ -133,25 +139,32 @@ export function Canvas({ issues, tool, paletteKind, onPlaced }: { issues: Issue[
     setView({ k, x: mx - ((mx - view.x) / view.k) * k, y: my - ((my - view.y) / view.k) * k });
   };
 
+  const fitRef = useRef<() => void>(() => {});
   const fit = () => {
     const pts = Object.values(layout);
     if (!pts.length || !svg.current) return;
     const r = svg.current.getBoundingClientRect();
-    const x0 = Math.min(...pts.map((p) => p.x)) - 70, x1 = Math.max(...pts.map((p) => p.x)) + 70;
-    const y0 = Math.min(...pts.map((p) => p.y)) - 70, y1 = Math.max(...pts.map((p) => p.y)) + 70;
-    const k = Math.min(2, r.width / (x1 - x0), r.height / (y1 - y0));
+    const x0 = Math.min(...pts.map((p) => p.x)) - 80, x1 = Math.max(...pts.map((p) => p.x)) + 80;
+    const y0 = Math.min(...pts.map((p) => p.y)) - 110, y1 = Math.max(...pts.map((p) => p.y)) + 70;
+    const k = Math.min(1.5, r.width / (x1 - x0), r.height / (y1 - y0));
     setView({ k, x: -x0 * k + (r.width - (x1 - x0) * k) / 2, y: -y0 * k + (r.height - (y1 - y0) * k) / 2 });
   };
 
+  useEffect(() => {
+    const id = requestAnimationFrame(() => fitRef.current());
+    return () => cancelAnimationFrame(id);
+  }, [loadCount]);
+
   const pos = (r: ElementRef): Pt | undefined => layout[refKey(r)];
 
+  fitRef.current = fit;
   return (
     <div className="ecanvas">
       <div className="ecanvas-tools">
         <button onClick={fit} title="Fit network to window">Fit</button>
         <button onClick={() => setView({ ...view, k: Math.min(4, view.k * 1.25) })}>+</button>
         <button onClick={() => setView({ ...view, k: Math.max(0.2, view.k / 1.25) })}>−</button>
-        <button onClick={() => { checkpoint(); edit((m) => { m.layout = {}; m.layout = ensureLayout(m); }, { noHistory: true }); }} title="Re-run the automatic layout">Auto layout</button>
+        <button onClick={() => { checkpoint(); edit((m) => { m.layout = autoLayout(m, true); }, { noHistory: true }); }} title="Re-run the automatic layout">Auto layout</button>
       </div>
       <svg ref={svg} onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={() => setDrag(null)} onWheel={onWheel} onContextMenu={(e) => e.preventDefault()}
         className={paletteKind ? 'placing' : tool === 'connect' ? 'connecting' : ''} data-testid="engine-canvas">
@@ -189,7 +202,7 @@ export function Canvas({ issues, tool, paletteKind, onPlaced }: { issues: Issue[
             const c = layout[n.key];
             if (!c) return null;
             const cls = `enode ${n.kind}${sel.has(n.key) ? ' sel' : ''}${bad.has(n.key) ? ' bad' : warn.has(n.key) ? ' warn' : ''}`;
-            return <g key={n.key} className={cls} transform={`translate(${c.x} ${c.y})`}><Shape model={model} kind={n.kind} id={n.id} /><text y={HALF[n.kind].h + 13} textAnchor="middle">{n.label}</text></g>;
+            return <g key={n.key} className={cls} transform={`translate(${c.x} ${c.y})`}><Shape model={model} kind={n.kind} id={n.id} /><text y={HALF[n.kind].h + 13} textAnchor="middle">{n.label.length > 14 ? n.label.slice(0, 13) + '…' : n.label}</text></g>;
           })}
           {/* Free pipe ends that have no connection are marked. */}
           {model.pipes.map((p) => [1, 2].map((end) => {
@@ -214,7 +227,7 @@ export function Canvas({ issues, tool, paletteKind, onPlaced }: { issues: Issue[
 }
 
 /** Create a connection between two refs; cylinder links get a valve and port. */
-function connect(model: EngineModel, a: ElementRef, b: ElementRef, layout: Record<Key, Pt>) {
+function connect(_model: EngineModel, a: ElementRef, b: ElementRef, layout: Record<Key, Pt>) {
   const st = useEngine.getState();
   const cylA = a.kind === 'cylinder', cylB = b.kind === 'cylinder';
   st.edit((m) => {

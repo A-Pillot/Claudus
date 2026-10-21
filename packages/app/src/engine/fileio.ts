@@ -2,13 +2,13 @@
 import { createDefaultModel, parseSim, writeSim, type EngineModel } from '@claudus/engine';
 import { files } from '../files';
 import { extractModel, type Key } from './elements';
-import { autoLayout } from './layout';
+import { ensureLayout } from './layout';
 import { useEngine } from './store';
 
 /** Fresh default model with a laid-out network. */
 export function makeDefaultModel(): EngineModel {
   const m = createDefaultModel({});
-  m.layout = autoLayout(m);
+  m.layout = ensureLayout(m);
   return m;
 }
 
@@ -20,7 +20,7 @@ export function newFile(): void {
 export function loadText(name: string, text: string): string | null {
   try {
     const m = parseSim(text);
-    m.layout = autoLayout(m);
+    m.layout = ensureLayout(m);
     const s = useEngine.getState();
     s.setModel(m, name);
     s.setResults(null);

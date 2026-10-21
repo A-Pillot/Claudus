@@ -216,11 +216,13 @@ export function simulatePoint(model: EngineModel, test: TestPoint, opts: Simulat
   let nextProfile = 0;
 
   // Re-tune pipe gas properties from their current mean state once per cycle.
+  const pipeCp = new Map<(typeof net.pipes)[number], number>();
   const retunePipes = () => {
     for (const sp of net.pipes) {
       const s = sp.solver.sample(0.5);
       const g = fuelGas(s.T, s.burnt);
       sp.solver.setGas(g.gamma, g.R);
+      pipeCp.set(sp, (g.gamma * g.R) / (g.gamma - 1));
     }
   };
   retunePipes();
@@ -262,7 +264,10 @@ export function simulatePoint(model: EngineModel, test: TestPoint, opts: Simulat
         if (f.mdot === 0) continue;
         // Into the node is the negative of into the pipe.
         const mdot = -f.mdot;
-        flowStreams[pe.node].push({ mdot, h: f.hFlux / f.mdot, burnt: Math.min(1, Math.max(0, f.burntFlux / f.mdot)) });
+        const burntS = Math.min(1, Math.max(0, f.burntFlux / f.mdot));
+        // The pipe's energy is cp*T based (zero at 0 K); convert via the stream's stagnation temperature.
+        const T0s = f.hFlux / f.mdot / (pipeCp.get(sp) ?? 1005);
+        flowStreams[pe.node].push({ mdot, h: enthalpy(T0s, burntS, fuel), burnt: burntS });
         const cs = cylByNode.get(net.nodes[pe.node]);
         if (cs && pe.area.kind === 'valve') {
           const ci = cyls.indexOf(cs);

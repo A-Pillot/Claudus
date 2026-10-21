@@ -78,7 +78,7 @@ export function Plot({ series, xLabel, yLabel, logX, logY, xy, yRange, xRange, h
       width: el.clientWidth || 400,
       height,
       legend: { show: false },
-      cursor: { drag: { x: true, y: true, setScale: true }, points: { show: true } },
+      cursor: { drag: { x: true, y: true, setScale: true } },
       scales: {
         x: { time: false, distr: logX ? 3 : 1, ...(xRange ? { range: xRange } : {}) },
         y: { distr: logY ? 3 : 1, ...(yRange ? { range: yRange } : {}) },
