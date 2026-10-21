@@ -5,6 +5,7 @@ import { useApp } from '../store';
 import { files } from '../files';
 import { templatesForModel } from '../templates';
 import { TemplateMenu } from './TemplateMenu';
+import { TransferMenu } from './TransferMenu';
 
 export function Toolbar({ analysis }: { analysis: AnalysisState }) {
   const { model, fileName, dirty, end, setModel, setEnd, markSaved } = useApp();
@@ -39,6 +40,7 @@ export function Toolbar({ analysis }: { analysis: AnalysisState }) {
       <button onClick={save}>Save</button>
       <button onClick={exportSdf} disabled={!analysis.results || analysis.busy}>Export SDF</button>
       <TemplateMenu onError={setError} />
+      <TransferMenu onError={setError} />
       <span className="sep" />
       <div className="seg">
         {(['front', 'rear'] as End[]).map((e) => (
