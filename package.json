@@ -2,7 +2,7 @@
   "name": "claudus",
   "private": true,
   "version": "0.1.0",
-  "description": "Claudus: a modern rebuild of the Lotus SHARK suspension analysis software",
+  "description": "Claudus: modern rebuilds of the Lotus SHARK suspension analysis and Lotus Engine Simulation software",
   "license": "MIT",
   "type": "module",
   "workspaces": [
@@ -14,7 +14,7 @@
     "desktop": "npm run tauri -w @claudus/app -- dev",
     "desktop:build": "npm run tauri -w @claudus/app -- build",
     "test": "vitest run",
-    "typecheck": "tsc -p packages/core --noEmit && tsc -p packages/app --noEmit",
+    "typecheck": "tsc -p packages/core --noEmit && tsc -p packages/engine --noEmit && tsc -p packages/app --noEmit",
     "sdf": "tsx packages/core/src/cli.ts"
   },
   "devDependencies": {
