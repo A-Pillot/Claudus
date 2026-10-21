@@ -6,15 +6,16 @@
  * read and written back keeps everything SHARK put in it.
  */
 import type { Vec3 } from '../math/vec3.js';
+import { parseTemplateLines, templateLines } from '../template/file.js';
 import { defaultParams, type Model, type PointGroup, type RawSection, type SuspensionData, type VehicleParams } from '../model/types.js';
 
 export const KNOWN_SECTIONS = [
   'VERSION', 'PARAMETERS', 'FRONT SUSPENSION', 'REAR SUSPENSION', 'TOLERANCES', 'TITLES', 'TYRE', 'BODY',
   'FORMULA', 'ROLL SOLUTION', 'GROUPS', 'COMPLIANCE', 'FORCES', 'FSETS', 'RAVEN_DEFAULTS', 'EXTENDED BUMP',
-  'COMBINED', 'USER LINES',
+  'COMBINED', 'USER LINES', 'USER TEMPLATES',
 ] as const;
 
-const PARSED = new Set(['VERSION', 'PARAMETERS', 'FRONT SUSPENSION', 'REAR SUSPENSION', 'TOLERANCES', 'TITLES', 'TYRE', 'ROLL SOLUTION', 'GROUPS']);
+const PARSED = new Set(['VERSION', 'PARAMETERS', 'FRONT SUSPENSION', 'REAR SUSPENSION', 'TOLERANCES', 'TITLES', 'TYRE', 'ROLL SOLUTION', 'GROUPS', 'USER TEMPLATES']);
 
 const nums = (line: string | undefined): number[] =>
   (line ?? '').trim() === '' ? [] : (line as string).trim().split(/[\s,]+/).map((s) => Number(s.replace(/[dD]/, 'E')));
@@ -115,6 +116,7 @@ export function readDat(text: string): Model {
     tyreWidths: get('TYRE')?.lines.flatMap(nums) ?? [150, 150, 150, 150],
     rollSolution: nums(get('ROLL SOLUTION')?.lines[0])[0] ?? 1,
     groups: get('GROUPS') ? parseGroups(get('GROUPS')!.lines) : [],
+    ...(get('USER TEMPLATES') ? { templates: parseTemplateLines(get('USER TEMPLATES')!.lines, 'file') } : {}),
     sectionOrder: sections.map((s) => s.name),
     raw: sections.filter((s) => !PARSED.has(s.name)),
   };
@@ -147,6 +149,7 @@ export function writeDat(m: Model): string {
   ensure('PARAMETERS', 'VERSION');
   if (m.front) ensure('FRONT SUSPENSION', 'PARAMETERS');
   if (m.rear) ensure('REAR SUSPENSION', m.front ? 'FRONT SUSPENSION' : 'PARAMETERS');
+  if (m.templates?.length && !order.includes('USER TEMPLATES')) order.push('USER TEMPLATES');
   for (const name of order) {
     const body: string[] = [];
     switch (name) {
@@ -183,6 +186,10 @@ export function writeDat(m: Model): string {
         break;
       case 'ROLL SOLUTION':
         body.push(int(m.rollSolution));
+        break;
+      case 'USER TEMPLATES':
+        if (!m.templates?.length) continue;
+        body.push(...templateLines(m.templates));
         break;
       case 'GROUPS':
         body.push(int(m.groups.length));

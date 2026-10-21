@@ -6,6 +6,8 @@ import { useApp } from './store';
 export function useCorner(): { corner?: Corner; error?: string } {
   const data = useApp((s) => s.model[s.end]);
   const end = useApp((s) => s.end);
+  // A template can change under the same number (edited, or loaded from a file), so rebuild then too.
+  const templatesRev = useApp((s) => s.templatesRev);
   return useMemo(() => {
     if (!data) return { error: `This model has no ${end} suspension.` };
     try {
@@ -13,7 +15,7 @@ export function useCorner(): { corner?: Corner; error?: string } {
     } catch (e) {
       return { error: (e as Error).message };
     }
-  }, [data, end]);
+  }, [data, end, templatesRev]);
 }
 
 /** Both corners solved at the current articulation. Warm-starts from the previous solve so sliders stay smooth. */
@@ -46,6 +48,7 @@ export interface AnalysisState {
 
 export function useAnalysis(): AnalysisState {
   const model = useApp((s) => s.model);
+  const templatesRev = useApp((s) => s.templatesRev);
   const [state, setState] = useState<AnalysisState>({ busy: true });
   useEffect(() => {
     setState((s) => ({ ...s, busy: true }));
@@ -57,6 +60,6 @@ export function useAnalysis(): AnalysisState {
       }
     }, 250);
     return () => clearTimeout(t);
-  }, [model]);
+  }, [model, templatesRev]);
   return state;
 }

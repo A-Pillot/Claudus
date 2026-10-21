@@ -4,7 +4,7 @@
  */
 import { mirrorY, type Vec3 } from '../math/vec3.js';
 import { dummyPosition } from './define.js';
-import { GenType, GROUND, NONE, findGen, type GraphicElement, type Template, type TemplatePoint } from './types.js';
+import { GenType, GROUND, NONE, PointType, findGen, type GraphicElement, type Template, type TemplatePoint } from './types.js';
 
 /** Which general type a corner point's copy on the left-hand side takes. */
 const SECOND_SIDE: Partial<Record<GenType, GenType>> = {
@@ -143,8 +143,8 @@ export function addRollBar(t: Template, o: RollBarOptions): Template {
     point(m2, 'Roll bar mount 2', mirrorY(o.mount), bar2, GROUND, GenType.RollBarAxisPoint),
     point(rev, 'Roll bar revolute', centre, bar1, bar2, GenType.RollBarRevolute),
     // Second points on the bar axis make each mount a revolute.
-    point(d1, 'Roll bar axis 1', [0, 0, 0], bar1, GROUND, GenType.None, { dummy: { at: m1, dir: [m1, m2], offset: 100 } }),
-    point(d2, 'Roll bar axis 2', [0, 0, 0], bar2, GROUND, GenType.None, { dummy: { at: m2, dir: [m2, m1], offset: 100 } }),
+    point(d1, 'Roll bar axis 1', [0, 0, 0], bar1, GROUND, GenType.None, { dummy: { at: m1, dir: [m1, m2], offset: 100 }, pointType: PointType.DummyAxis }),
+    point(d2, 'Roll bar axis 2', [0, 0, 0], bar2, GROUND, GenType.None, { dummy: { at: m2, dir: [m2, m1], offset: 100 }, pointType: PointType.DummyAxis }),
   ];
   added[7].def = dummyPosition(o.mount, o.mount, mirrorY(o.mount), 100);
   added[8].def = dummyPosition(mirrorY(o.mount), mirrorY(o.mount), o.mount, 100);
@@ -213,4 +213,14 @@ export function addTwoPartRack(t: Template, o: RackOptions): Template {
     graphics: [...t.graphics, ...graphics],
     source: 'custom',
   };
+}
+
+/**
+ * Convert Corner to Axle for a model: the converted template plus the model's points, with the left side
+ * set to the mirror image of the model's own right-hand points (not the template defaults).
+ */
+export function convertPointsToAxle(t: Template, points: Vec3[], opts: ConvertOptions = {}): { template: Template; points: Vec3[] } {
+  const template = convertToAxle(t, opts);
+  const data = points.slice(0, t.points.filter(isData).length);
+  return { template, points: [...data, ...data.map(mirrorY)] };
 }
