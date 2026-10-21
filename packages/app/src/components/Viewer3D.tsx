@@ -15,9 +15,11 @@ interface Props {
   state: AxleState;
   /** Present in compliant mode: joint results for the right-hand corner. */
   detail?: ComplianceResult;
+  /** Other solved steps drawn as a lighter overlay (articulation display, all steps). */
+  ghosts?: AxleState[];
 }
 
-export function Viewer3D({ corner, state, detail }: Props) {
+export function Viewer3D({ corner, state, detail, ghosts }: Props) {
   const view = useApp((s) => s.view);
   const compliant = useApp((s) => s.compliant);
   const wc = corner.mech.staticPoints[corner.mech.wheelCentre];
@@ -38,6 +40,12 @@ export function Viewer3D({ corner, state, detail }: Props) {
         {detail && <ComplianceScene corner={corner} points={state.right.points} detail={detail} />}
         {compliant && <CogScene corner={corner} points={state.right.points} />}
         {state.leftMirror && view.bothSides && <Side corner={corner} points={state.leftMirror.points.map(mirrorY)} mirrored />}
+        {ghosts?.map((g, i) => (
+          <group key={i}>
+            <GraphicElements corner={corner} points={g.right.points} interactive={false} />
+            {g.leftMirror && view.bothSides && <GraphicElements corner={corner} points={g.leftMirror.points.map(mirrorY)} interactive={false} />}
+          </group>
+        ))}
         <Ground z={state.right.groundZ} x={wc[0]} />
         <RollCentre rc={state.rollCentre} />
         {view.triad && <axesHelper args={[300]} />}

@@ -6,16 +6,24 @@
 import { create } from 'zustand';
 import {
   defaultOptimiserSettings, lineKey, sortUserLine,
-  type EndAnalysis, type End, type Model, type OptimiserParameter, type OptimiserSettings, type SumTarget, type Sweep, type UserLine,
+  type EndAnalysis, type End, type Side, type Model, type OptimiserParameter, type OptimiserSettings, type SumTarget, type Sweep, type UserLine,
 } from '@claudus/core';
 
 export type PanelId = 'kinSum' | 'optimiser' | 'modal' | 'sweep';
 export type DisplayMode = 'articulation' | 'deformed' | 'mode' | 'forced';
+/** How the articulation display draws the sweep: at the sliders, at every step, or at one step. */
+export type ArticulationView = 'live' | 'all' | 'single';
+export type SweepKind = 'bump' | 'roll' | 'rack';
 
 export const SCOPE_SLOTS = 5;
 
 export interface DisplaySettings {
   mode: DisplayMode;
+  artView: ArticulationView;
+  /** Which travel the All steps and Single step views run through. */
+  artSweep: SweepKind;
+  /** Single step position: 0 is static, 1..n the calculated travel points. */
+  step: number;
   /** 1-based, lowest frequency first. */
   modeNo: number;
   modeScalar: number;
@@ -29,17 +37,22 @@ export interface GraphVisibility {
   deviation: boolean;
   userLine: boolean;
   scope: boolean;
+  /** Draw the slope of each data line at its points and at the static position. */
+  derivative: boolean;
+  /** Show the -Y (left) wheel's data line and user line. */
+  left: boolean;
 }
 
 export interface EditLineTarget {
   end: End;
+  side: Side;
   sweep: Sweep;
   variable: string;
   /** Shown in the dialog title. */
   label: string;
 }
 
-type LineId = Pick<UserLine, 'sweep' | 'variable' | 'end'>;
+type LineId = Pick<UserLine, 'sweep' | 'variable' | 'end' | 'side'>;
 
 export interface LabState {
   userLines: UserLine[];
@@ -63,6 +76,9 @@ export interface LabState {
 
   graphVis: GraphVisibility;
   setGraphVis: (v: Partial<GraphVisibility>) => void;
+  /** Menu commands for every open graph; each graph acts when `n` changes. */
+  graphCmd: { n: number; kind: 'swap' | 'autoscale' | 'styles' };
+  sendGraphCmd: (kind: 'swap' | 'autoscale' | 'styles') => void;
 
   editLine: EditLineTarget | null;
   setEditLine: (e: EditLineTarget | null) => void;
@@ -108,8 +124,10 @@ export const useLab = create<LabState>((set) => ({
   scopeDevSlot: 0,
   setScopeDevSlot: (scopeDevSlot) => set({ scopeDevSlot }),
 
-  graphVis: { deviation: false, userLine: true, scope: true },
+  graphVis: { deviation: false, userLine: true, scope: true, derivative: false, left: false },
   setGraphVis: (v) => set((s) => ({ graphVis: { ...s.graphVis, ...v } })),
+  graphCmd: { n: 0, kind: 'autoscale' },
+  sendGraphCmd: (kind) => set((s) => ({ graphCmd: { n: s.graphCmd.n + 1, kind } })),
 
   editLine: null,
   setEditLine: (editLine) => set({ editLine }),
@@ -129,6 +147,6 @@ export const useLab = create<LabState>((set) => ({
   optBackup: null,
   setOptBackup: (optBackup) => set({ optBackup }),
 
-  display: { mode: 'articulation', modeNo: 1, modeScalar: 20, forcedHz: 15, forcedScalar: 20, deformScalar: 10, animate: false },
+  display: { mode: 'articulation', artView: 'live', artSweep: 'bump', step: 0, modeNo: 1, modeScalar: 20, forcedHz: 15, forcedScalar: 20, deformScalar: 10, animate: false },
   setDisplay: (d) => set((s) => ({ display: { ...s.display, ...d } })),
 }));

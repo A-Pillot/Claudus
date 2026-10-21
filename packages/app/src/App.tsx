@@ -62,7 +62,7 @@ export function App() {
       <main className="view">
         {corner && state ? (
           <>
-            <ErrorBoundary resetKey={revision}><Viewer3D corner={corner} state={shown.state ?? state} detail={detail} /></ErrorBoundary>
+            <ErrorBoundary resetKey={revision}><Viewer3D corner={corner} state={shown.state ?? state} detail={detail} ghosts={shown.ghosts} /></ErrorBoundary>
             <AddBanner />
             {compliant && <div className="overlay badge">Compliant solution</div>}
             {shown.caption && <div className="overlay caption" data-testid="display-caption">{shown.caption}</div>}

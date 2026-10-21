@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { newModel } from '../src/model/new.js';
 import { Corner } from '../src/solver/corner.js';
-import { bumpSweep } from '../src/results/derivatives.js';
-import { deviation, interpolate, lineFromData, sortUserLine } from '../src/optimise/lines.js';
+import { bumpSweep, rollSweep } from '../src/results/derivatives.js';
+import { deviation, interpolate, lineFromData, lineKey, sortUserLine } from '../src/optimise/lines.js';
 import { kinematicSum, type SumTarget } from '../src/optimise/sum.js';
 import { optimise, parameterValue, runOptimiser, withParameter, type OptimiserParameter } from '../src/optimise/optimiser.js';
 import { getTemplate } from '../src/template/registry.js';
@@ -27,6 +27,40 @@ describe('user lines', () => {
     const line = lineFromData(rows, 'bump', 'camber', 'front');
     expect(deviation(rows, line)).toBeCloseTo(0, 12);
     expect(deviation(rows, { ...line, points: line.points.map(([x, y]) => [x, y + 0.5]) })).toBeCloseTo(0.5, 9);
+  });
+});
+
+describe('left (-Y) user lines', () => {
+  it('keys the sides apart and the bump results match the right side', () => {
+    const rows = bumpRows(newModel(1));
+    const r = lineFromData(rows, 'bump', 'camber', 'front');
+    const l = lineFromData(rows, 'bump', 'camber', 'front', 'left');
+    expect(l.side).toBe('left');
+    expect(lineKey(l)).not.toBe(lineKey(r));
+    expect(l.points).toEqual(r.points);
+  });
+
+  it('the left wheel in roll is the right wheel at the opposite roll', () => {
+    const m = newModel(1);
+    const rows = rollSweep(new Corner(m.front!, 'front'), m.params);
+    const l = lineFromData(rows, 'roll', 'camber', 'front', 'left');
+    const r = lineFromData(rows, 'roll', 'camber', 'front');
+    expect(deviation(rows, l)).toBeCloseTo(0, 12);
+    expect(deviation(rows, r)).toBeCloseTo(0, 12);
+    // Mirrored in x, so the right line does not describe the left wheel unless the curve is symmetric.
+    const flipped = r.points.map(([x, y]) => [-x, y] as [number, number]).reverse();
+    expect(l.points.map((p) => p[0])).toEqual(flipped.map((p) => p[0]));
+    l.points.forEach((p, i) => expect(p[1]).toBeCloseTo(flipped[i][1], 12));
+    expect(Math.abs(deviation(rows, { ...r, side: 'left' })!)).toBeGreaterThan(1e-6);
+  });
+
+  it('the kinematic sum picks the line for the target side', () => {
+    const m = newModel(1);
+    const rows = rollSweep(new Corner(m.front!, 'front'), m.params);
+    const left = lineFromData(rows, 'roll', 'camber', 'front', 'left');
+    const t = (side?: 'left'): SumTarget => ({ kind: 'graph', end: 'front', side, sweep: 'roll', variable: 'camber', weight: 1, on: true });
+    expect(kinematicSum(m, [t('left')], [left]).total).toBeCloseTo(0, 9);
+    expect(kinematicSum(m, [t()], [left]).items[0].deviation).toBeUndefined();
   });
 });
 

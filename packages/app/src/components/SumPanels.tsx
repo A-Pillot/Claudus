@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   COEFFICIENTS, dataPoints, getTemplate, hasTemplate, kinematicSum, lineKey, optimise, parameterValue, withParameter,
-  type End, type KinematicSum, type Model, type OptimiserParameter, type ParameterState, type SumTarget, type Sweep, type Template,
+  type End, type KinematicSum, type Side, type Model, type OptimiserParameter, type ParameterState, type SumTarget, type Sweep, type Template,
 } from '@claudus/core';
 import { useApp } from '../store';
 import { useLab } from '../lab';
@@ -53,7 +53,7 @@ export function useKinematicSum(enabled = true): { sum?: KinematicSum; busy: boo
 export const targetLabel = (t: SumTarget): string => {
   if (t.kind === 'graph') {
     const y = VARIABLES[t.sweep].ys.find((v) => v.key === t.variable);
-    return `${END_NAME[t.end]} ${y?.label ?? t.variable} (${SWEEP_NAME[t.sweep]})`;
+    return `${END_NAME[t.end]}${t.side === 'left' ? ' (-Y)' : ''} ${y?.label ?? t.variable} (${SWEEP_NAME[t.sweep]})`;
   }
   const c = COEFFICIENTS.find((x) => x.key === t.coefficient);
   return `${END_NAME[t.end]} compliance: ${c?.label ?? t.coefficient}, force set ${t.set + 1}`;
@@ -84,11 +84,11 @@ function KinSumBody() {
   const edit = (i: number, patch: Partial<SumTarget>) => setTargets(targets.map((t, j) => (j === i ? ({ ...t, ...patch } as SumTarget) : t)));
   const includeAll = () => {
     const have = new Set(targets.filter((t) => t.kind === 'graph').map((t) => lineKey(t as Extract<SumTarget, { kind: 'graph' }>)));
-    const added = lines.filter((l) => !have.has(lineKey(l))).map((l): SumTarget => ({ kind: 'graph', end: l.end, sweep: l.sweep, variable: l.variable, weight: 1, on: true }));
+    const added = lines.filter((l) => !have.has(lineKey(l))).map((l): SumTarget => ({ kind: 'graph', end: l.end, ...(l.side ? { side: l.side } : {}), sweep: l.sweep, variable: l.variable, weight: 1, on: true }));
     setTargets([...targets, ...added]);
   };
 
-  const [g, setG] = useState<{ end: End; sweep: Sweep; variable: string }>({ end: ends[0] ?? 'front', sweep: 'bump', variable: 'camber' });
+  const [g, setG] = useState<{ end: End; side: Side; sweep: Sweep; variable: string }>({ end: ends[0] ?? 'front', side: 'right', sweep: 'bump', variable: 'camber' });
   const [c, setC] = useState<{ end: End; set: number; coefficient: (typeof COEFFICIENTS)[number]['key']; target: number }>({ end: ends[0] ?? 'front', set: 0, coefficient: 'toe', target: 0 });
 
   return (
@@ -126,11 +126,12 @@ function KinSumBody() {
       <fieldset className="addrow">
         <legend>Add graph result</legend>
         <select aria-label="End" value={g.end} onChange={(e) => setG({ ...g, end: e.target.value as End })}>{ends.map((e) => <option key={e} value={e}>{END_NAME[e]}</option>)}</select>
+        <select aria-label="Side" value={g.side} onChange={(e) => setG({ ...g, side: e.target.value as Side })}><option value="right">+Y</option><option value="left">-Y</option></select>
         <select aria-label="Sweep" value={g.sweep} onChange={(e) => setG({ ...g, sweep: e.target.value as Sweep, variable: VARIABLES[e.target.value as Sweep].ys[0].key })}>
           <option value="bump">Bump</option><option value="roll">Roll</option><option value="steer">Steer</option>
         </select>
         <select aria-label="Variable" value={g.variable} onChange={(e) => setG({ ...g, variable: e.target.value })}>{VARIABLES[g.sweep].ys.map((v) => <option key={v.key} value={v.key}>{v.label}</option>)}</select>
-        <button onClick={() => setTargets([...targets, { kind: 'graph', ...g, weight: 1, on: true }])}>Add</button>
+        <button onClick={() => setTargets([...targets, { kind: 'graph', end: g.end, ...(g.side === 'left' ? { side: g.side } : {}), sweep: g.sweep, variable: g.variable, weight: 1, on: true }])}>Add</button>
       </fieldset>
       <fieldset className="addrow">
         <legend>Add compliance coefficient</legend>

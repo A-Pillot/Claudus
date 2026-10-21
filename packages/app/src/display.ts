@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Corner, add, displacedPoints, forcedResponseAt, forcedSetup, modalAnalysis, responseAtPhase, solveAxle, sub,
-  type AxleState, type ModalResult, type Vec3,
+  type AxleState, type ModalResult, type Vec3, type VehicleParams,
 } from '@claudus/core';
 import { useApp } from './store';
-import { useLab, type DisplayMode } from './lab';
+import { useLab, type DisplayMode, type SweepKind } from './lab';
 import { useEffectiveCompliance } from './derived';
 
 /** The modal analysis of the shown end at the current position; only worked out while something needs it. */
@@ -37,9 +37,28 @@ export function usePhase(active: boolean): number {
   return phase;
 }
 
+/** The calculated travel points of a sweep, as the analysis uses them but without the static one. */
+export function stepValues(p: VehicleParams, sweep: SweepKind): number[] {
+  const [lo, hi, inc] = sweep === 'bump' ? [-p.reboundTravel, p.bumpTravel, p.bumpIncrement]
+    : sweep === 'roll' ? [-p.rollAngle, p.rollAngle, p.rollIncrement] : [-p.steerTravel, p.steerTravel, p.steerIncrement];
+  const out: number[] = [];
+  if (!(inc > 0)) return out;
+  const n = Math.min(200, Math.round((hi - lo) / inc));
+  for (let i = 0; i <= n; i++) {
+    const v = Number((lo + i * inc).toFixed(9));
+    if (Math.abs(v) > 1e-9) out.push(v);
+  }
+  return out;
+}
+
+export const sweepLabel = (sweep: SweepKind, v: number) =>
+  sweep === 'bump' ? `Bump ${v.toFixed(1)} mm` : sweep === 'roll' ? `Roll ${v.toFixed(2)} deg` : `Steer ${v.toFixed(1)} mm`;
+
 export interface DisplayedState {
   state: AxleState | undefined;
   mode: DisplayMode;
+  /** Articulation display, all steps: every other step's solution, drawn behind the main one. */
+  ghosts?: AxleState[];
   /** Text for the 3D view: which mode and frequency is drawn. */
   caption?: string;
 }
@@ -91,7 +110,42 @@ export function useDisplayedState(corner: Corner | undefined, state: AxleState |
   }, [mode, corner, state, comp]);
   const response = useMemo(() => (setup ? forcedResponseAt(setup, d.forcedHz) : undefined), [setup, d.forcedHz]);
 
+  // Articulation display of one step or of every step of a sweep.
+  const params = useApp((s) => s.model.params);
+  const steps = useMemo(() => stepValues(params, d.artSweep), [params, d.artSweep]);
+  const artSolutions = useMemo(() => {
+    if (!corner || mode !== 'articulation' || d.artView === 'live') return undefined;
+    const at = (v: number, warm?: AxleState) => {
+      try {
+        const st = solveAxle(corner, { [d.artSweep]: v }, warm && { right: warm.right.x, left: warm.leftMirror?.x });
+        return st.right.converged ? st : undefined;
+      } catch {
+        return undefined;
+      }
+    };
+    if (d.artView === 'single') {
+      const k = Math.min(Math.max(0, Math.round(d.step)), steps.length);
+      return { single: at(k === 0 ? 0 : steps[k - 1]), k };
+    }
+    // Warm start each solve from the one before it, working outward from static each way.
+    const out: AxleState[] = [];
+    for (const dir of [1, -1]) {
+      let warm: AxleState | undefined;
+      for (const v of dir > 0 ? steps.filter((x) => x > 0) : steps.filter((x) => x < 0).reverse()) {
+        const st = at(v, warm);
+        if (st) { out.push(st); warm = st; }
+      }
+    }
+    return { all: out };
+  }, [corner, mode, d.artView, d.artSweep, d.step, steps, templatesRev]);
+
   return useMemo((): DisplayedState => {
+    if (mode === 'articulation' && artSolutions) {
+      if (artSolutions.all) return { state, mode, ghosts: artSolutions.all, caption: `All steps: ${artSolutions.all.length} ${d.artSweep} positions` };
+      const k = artSolutions.k ?? 0;
+      const label = k === 0 ? 'static' : sweepLabel(d.artSweep, steps[k - 1]);
+      return { state: artSolutions.single ?? state, mode, caption: `Single step ${k} of ${steps.length}: ${label}` };
+    }
     if (!state || mode === 'articulation') return { state, mode };
     let delta: Vec3[] | undefined;
     let caption: string | undefined;
@@ -129,5 +183,5 @@ export function useDisplayedState(corner: Corner | undefined, state: AxleState |
       },
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, mode, kinematic, unitMode, modal, modeIndex, setup, response, corner, d.animate, d.deformScalar, d.modeScalar, d.forcedScalar, d.forcedHz, phaseDeg]);
+  }, [state, mode, artSolutions, steps, d.artSweep, kinematic, unitMode, modal, modeIndex, setup, response, corner, d.animate, d.deformScalar, d.modeScalar, d.forcedScalar, d.forcedHz, phaseDeg]);
 }
