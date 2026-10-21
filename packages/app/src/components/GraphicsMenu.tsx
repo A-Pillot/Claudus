@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ELEMENT_OPTIONS, getTemplate, hasTemplate, optionOf } from '@claudus/core';
 import { useApp, type GraphicsView } from '../store';
+import { useModes } from '../modes';
 import { cancelAdd, deleteGraphic, startAdd } from '../graphicsActions';
 import { captureFrame, useFrames } from '../video';
 import { VideoDialog } from './VideoDialog';
@@ -36,6 +37,8 @@ export function GraphicsMenu() {
   const [group, setGroup] = useState<string | null>(null);
   const [listing, setListing] = useState(false);
   const [video, setVideo] = useState(false);
+  const limitsVisible = useModes((s) => s.limitsVisible);
+  const limitsUse = useModes((s) => s.limitsUse);
   const frameCount = useFrames((s) => s.frames.length);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -98,6 +101,14 @@ export function GraphicsMenu() {
               <span className="tick">{view[k] ? '✓' : ''}</span>{label}
             </button>
           ))}
+          <hr />
+          <div className="menuhead">Point limits</div>
+          <button role="menuitemcheckbox" aria-checked={limitsVisible} onClick={() => useModes.getState().set({ limitsVisible: !limitsVisible })}>
+            <span className="tick">{limitsVisible ? '✓' : ''}</span>Limit boxes visible
+          </button>
+          <button role="menuitemcheckbox" aria-checked={limitsUse} disabled={!limitsVisible} title="Limit boxes can only be in use while visible" onClick={() => useModes.getState().set({ limitsUse: !limitsUse })}>
+            <span className="tick">{limitsUse ? '✓' : ''}</span>Limit boxes in use
+          </button>
           <hr />
           <div className="menuhead">Compliance visibility</div>
           {COMPLIANCE_TOGGLES.map(([k, label]) => (

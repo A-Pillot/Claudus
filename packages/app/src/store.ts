@@ -1,7 +1,8 @@
 import { create } from 'zustand';
-import { completeModel, defaultCompliance, defaultEndCompliance, type ComplianceData, type EndCompliance, getTemplate, hasTemplate, newModel, registerTemplate, remapPoints, type End, type Model, type Template, type Vec3, type VehicleParams } from '@claudus/core';
+import { constrainToLimit, limitOf, completeModel, defaultCompliance, defaultEndCompliance, type ComplianceData, type EndCompliance, getTemplate, hasTemplate, newModel, registerTemplate, remapPoints, type End, type Model, type Template, type Vec3, type VehicleParams } from '@claudus/core';
 import type { ElementOption } from '@claudus/core';
 import { addToLibrary, loadLibrary } from './templates';
+import { useModes } from './modes';
 
 loadLibrary();
 
@@ -91,6 +92,8 @@ export interface AppState {
   setArt: (a: Partial<ArticulationState>) => void;
   select: (i: number | null) => void;
   setPoint: (index: number, axis: number, value: number) => void;
+  /** Joggle or drag a point to a position: held inside its limit box when the boxes are in use. */
+  movePoint: (index: number, to: Vec3) => void;
   setRollingRadius: (r: number) => void;
   setParam: <K extends keyof VehicleParams>(k: K, v: VehicleParams[K]) => void;
   markSaved: (fileName: string) => void;
@@ -125,6 +128,18 @@ export function endEdit(): void {
   heldFrom = null;
   const { model, undoLimit } = useApp.getState();
   if (from && from !== model && undoLimit > 0) useApp.setState((s) => ({ undoStack: [...s.undoStack, from].slice(-undoLimit), redoStack: [] }));
+}
+
+/** Enlarge a point's stored limit box to take in its (new) position. A point with no stored box keeps the default. */
+export function growLimit(m: Model, end: End, index: number): Model {
+  const stored = m.limits?.[end]?.[index];
+  const p = m[end]?.points[index];
+  if (!stored || !p) return m;
+  const box = constrainToLimit(stored, p, false).box;
+  if (box.min.every((v, i) => v === stored.min[i]) && box.max.every((v, i) => v === stored.max[i])) return m;
+  const list = [...m.limits![end]!];
+  list[index] = box;
+  return { ...m, limits: { ...m.limits, [end]: list } };
 }
 
 const zeroArt: ArticulationState = { bump: 0, roll: 0, rack: 0 };
@@ -200,7 +215,17 @@ export const useApp = create<AppState>((set, get) => ({
       const data = s.model[s.end];
       if (!data || !Number.isFinite(value)) return {};
       const points = data.points.map((p, i) => (i === index ? (p.map((v, k) => (k === axis ? value : v)) as Vec3) : p));
-      return { model: { ...s.model, [s.end]: { ...data, points } }, dirty: true, revision: s.revision + 1 };
+      // Typing a position outside the limit box is allowed; the box grows to take it in.
+      return { model: growLimit({ ...s.model, [s.end]: { ...data, points } }, s.end, index), dirty: true, revision: s.revision + 1 };
+    }),
+  movePoint: (index, to) =>
+    set((s) => {
+      const data = s.model[s.end];
+      if (!data || !to.every(Number.isFinite)) return {};
+      const use = useModes.getState().limitsUse;
+      const p = use ? constrainToLimit(limitOf(s.model, s.end, index), to, true).point : to;
+      const points = data.points.map((q, i) => (i === index ? p : q));
+      return { model: growLimit({ ...s.model, [s.end]: { ...data, points } }, s.end, index), dirty: true, revision: s.revision + 1 };
     }),
   setRollingRadius: (r) =>
     set((s) => {

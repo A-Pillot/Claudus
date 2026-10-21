@@ -5,6 +5,7 @@
  * in a temporary store that lives as long as the program is open. File / Add End from File brings the other
  * suspension end in from a saved model.
  */
+import { fitAddedEnd, type AxleFitOptions } from './axleFit.js';
 import type { Vec3 } from '../math/vec3.js';
 import type { End, Model } from './types.js';
 
@@ -50,7 +51,7 @@ export const deleteCoordSet = (store: CoordSet[], label: string): CoordSet[] => 
  * File / Add End from File: take the missing end from another model. Only available when the model has
  * exactly one end. The source's matching end is used, or its only end when it has just one.
  */
-export function addEndFromModel(m: Model, other: Model): { model: Model; end: End } {
+export function addEndFromModel(m: Model, other: Model, fit?: AxleFitOptions): { model: Model; end: End } {
   if (m.front && m.rear) throw new CoordSetError('This model already has both ends');
   if (!m.front && !m.rear) throw new CoordSetError('This model has no suspension to add an end to');
   const end: End = m.front ? 'rear' : 'front';
@@ -71,5 +72,5 @@ export function addEndFromModel(m: Model, other: Model): { model: Model; end: En
     ...(templates.length ? { templates } : {}),
     sectionOrder: m.sectionOrder.includes(section) ? m.sectionOrder : [...m.sectionOrder.slice(0, 2), section, ...m.sectionOrder.slice(2)],
   };
-  return { model, end };
+  return { model: fit ? fitAddedEnd(model, end, fit) : model, end };
 }

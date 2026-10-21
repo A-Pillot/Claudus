@@ -2,10 +2,11 @@
 import type { Model } from '../model/types.js';
 import type { EndAnalysis } from './derivatives.js';
 import { dataPoints } from '../template/types.js';
+import { SWEEP_VARIABLES, isExtraVariable, valueOf, type ResultVar, type SweepKind } from './variables.js';
 
-const f = (v: number, d = 4, w = 12) => (Number.isFinite(v) ? v.toFixed(d) : '-').padStart(w);
+export const f = (v: number, d = 4, w = 12) => (Number.isFinite(v) ? v.toFixed(d) : '-').padStart(w);
 
-function table(title: string, cols: { head: string[]; get: (r: any) => number; d?: number }[], rows: any[]): string[] {
+export function table(title: string, cols: { head: string[]; get: (r: any) => number; d?: number }[], rows: any[]): string[] {
   const out = ['', `  ${title}`, ''];
   const nHead = Math.max(...cols.map((c) => c.head.length));
   for (let i = 0; i < nHead; i++) out.push(cols.map((c) => (c.head[i] ?? '').padStart(12)).join(''));
@@ -14,23 +15,53 @@ function table(title: string, cols: { head: string[]; get: (r: any) => number; d
   return out;
 }
 
-export function formatSdf(m: Model, results: EndAnalysis[], name = ''): string {
-  const L: string[] = [];
-  L.push('CLAUDUS SUSPENSION DERIVATIVE FILE', name ? `Model: ${name}` : '', '');
+/** Title block and general data lines shared by the SDF listings. */
+export function sdfHeader(m: Model, title: string, name = ''): string[] {
   const p = m.params;
-  L.push('GENERAL DATA');
-  L.push(`  Wheelbase ${p.wheelbase} mm   C of G height ${p.cogHeight} mm   Braking on front ${p.brakeFrontPct} %   Drive on front ${p.driveFrontPct} %   Weight on front ${p.weightFrontPct} %`);
+  return [
+    title, name ? `Model: ${name}` : '', '',
+    'GENERAL DATA',
+    `  Wheelbase ${p.wheelbase} mm   C of G height ${p.cogHeight} mm   Braking on front ${p.brakeFrontPct} %   Drive on front ${p.driveFrontPct} %   Weight on front ${p.weightFrontPct} %`,
+  ];
+}
+
+/** The banner and the echo of the input hard points for one end. */
+export function endHardPoints(m: Model, a: EndAnalysis): string[] {
+  const L: string[] = [];
+  const t = a.corner.template;
+  const END = a.end.toUpperCase();
+  const data = m[a.end]!;
+  L.push('', '='.repeat(96), `${END} SUSPENSION    TYPE ${t.slot} ${t.label}`, '='.repeat(96), '', '  HARD POINTS (right-hand side)', '');
+  L.push('   No  Label                                            X            Y            Z');
+  dataPoints(t).forEach((tp, i) => {
+    const q = data.points[i] ?? tp.def;
+    L.push(`  ${String(tp.no).padStart(3)}  ${tp.label.padEnd(42).slice(0, 42)}${f(q[0], 2, 13)}${f(q[1], 2, 13)}${f(q[2], 2, 13)}`);
+  });
+  L.push(`       Rolling radius ${data.rollingRadius} mm`);
+  return L;
+}
+
+/** Tables of the additional incremental values of a sweep. Columns with no finite value (such as damper 2 on a corner) are left out. */
+function extraTables(title: string, kind: SweepKind, rows: any[]): string[] {
+  const x = SWEEP_VARIABLES[kind].x;
+  const cols = SWEEP_VARIABLES[kind].ys.filter((c) => isExtraVariable(c.key) && rows.some((r) => Number.isFinite(valueOf(r, c.key))));
+  const out: string[] = [];
+  const PER = 8;
+  for (let i = 0; i < cols.length; i += PER) {
+    const part = cols.slice(i, i + PER);
+    out.push(...table(`${title} (additional values ${i / PER + 1})`, [
+      { head: x.head, get: (r) => valueOf(r, x.key), d: x.d },
+      ...part.map((c: ResultVar) => ({ head: c.head, get: (r: any) => valueOf(r, c.key), d: c.d })),
+    ], rows));
+  }
+  return out;
+}
+
+export function formatSdf(m: Model, results: EndAnalysis[], name = ''): string {
+  const L: string[] = sdfHeader(m, 'CLAUDUS SUSPENSION DERIVATIVE FILE', name);
   for (const a of results) {
-    const t = a.corner.template;
     const END = a.end.toUpperCase();
-    const data = m[a.end]!;
-    L.push('', '='.repeat(96), `${END} SUSPENSION    TYPE ${t.slot} ${t.label}`, '='.repeat(96), '', '  HARD POINTS (right-hand side)', '');
-    L.push('   No  Label                                            X            Y            Z');
-    dataPoints(t).forEach((tp, i) => {
-      const q = data.points[i] ?? tp.def;
-      L.push(`  ${String(tp.no).padStart(3)}  ${tp.label.padEnd(42).slice(0, 42)}${f(q[0], 2, 13)}${f(q[1], 2, 13)}${f(q[2], 2, 13)}`);
-    });
-    L.push(`       Rolling radius ${data.rollingRadius} mm`);
+    L.push(...endHardPoints(m, a));
     const s = a.statics;
     L.push('', '  STATIC VALUES', '');
     const sv: [string, number][] = [
@@ -48,6 +79,10 @@ export function formatSdf(m: Model, results: EndAnalysis[], name = ''): string {
     ];
     for (const [k, v] of sv) L.push(`    ${k.padEnd(40)}${f(v)}`);
 
+    if (a.bumpLabels.some((x) => x)) {
+      L.push('', '  EXTENDED BUMP TRAVEL POSITIONS', '');
+      a.bump.forEach((r, i) => L.push(`    ${f(r.bump, 2)}  ${a.bumpLabels[i] ?? ''}`));
+    }
     L.push(...table(`${END} SUSPENSION - BUMP TRAVEL`, [
       { head: ['BUMP', 'TRAVEL', '(mm)'], get: (r) => r.bump, d: 2 },
       { head: ['CAMBER', 'ANGLE', '(deg)'], get: (r) => r.camber },
@@ -68,6 +103,7 @@ export function formatSdf(m: Model, results: EndAnalysis[], name = ''): string {
       { head: ['DAMPER', 'TRAVEL', '(mm)'], get: (r) => r.damperTravel, d: 3 },
       { head: ['SPRING', 'TRAVEL', '(mm)'], get: (r) => r.springTravel, d: 3 },
     ], a.bump));
+    L.push(...extraTables(`${END} SUSPENSION - BUMP TRAVEL`, 'bump', a.bump));
     L.push(...table(`${END} SUSPENSION - ROLL`, [
       { head: ['ROLL', 'ANGLE', '(deg)'], get: (r) => r.roll, d: 2 },
       { head: ['CAMBER', 'ANGLE', '(deg)'], get: (r) => r.camber },
@@ -87,7 +123,8 @@ export function formatSdf(m: Model, results: EndAnalysis[], name = ''): string {
       { head: ['DAMPER', 'TRAVEL', '(mm)'], get: (r) => r.damperTravel, d: 3 },
       { head: ['SPRING', 'TRAVEL', '(mm)'], get: (r) => r.springTravel, d: 3 },
     ], a.roll));
-    if (a.steer.length)
+    L.push(...extraTables(`${END} SUSPENSION - ROLL`, 'roll', a.roll));
+    if (a.steer.length) {
       L.push(...table(`${END} SUSPENSION - STEER`, [
         { head: ['RACK', 'TRAVEL', '(mm)'], get: (r) => r.rack, d: 2 },
         { head: ['TOE ANGLE', 'INNER', '(deg)'], get: (r) => r.toeInner },
@@ -97,6 +134,22 @@ export function formatSdf(m: Model, results: EndAnalysis[], name = ''): string {
         { head: ['ACKERMANN', '(%)'], get: (r) => r.ackermann, d: 2 },
         { head: ['TURNING', 'RADIUS', '(mm)'], get: (r) => r.turningRadius, d: 0 },
       ], a.steer));
+      L.push(...extraTables(`${END} SUSPENSION - STEER`, 'steer', a.steer));
+    }
+    if (a.combined.length)
+      L.push(...table(`${END} SUSPENSION - COMBINED MOTION`, [
+        { head: ['STEP'], get: (r) => r.step, d: 0 },
+        { head: ['BUMP', 'TRAVEL', '(mm)'], get: (r) => r.bump, d: 2 },
+        { head: ['RACK', 'TRAVEL', '(mm)'], get: (r) => r.rack, d: 2 },
+        { head: ['CAMBER', 'ANGLE', '(deg)'], get: (r) => r.camber },
+        { head: ['TOE', 'ANGLE', '(deg)'], get: (r) => r.toeSae },
+        { head: ['CASTOR', 'ANGLE', '(deg)'], get: (r) => r.castor },
+        { head: ['KINGPIN', 'ANGLE', '(deg)'], get: (r) => r.kingpin },
+        { head: ['HALF TRACK', 'CHANGE', '(mm)'], get: (r) => r.halfTrackChange, d: 3 },
+        { head: ['WHEELBASE', 'CHANGE', '(mm)'], get: (r) => r.wheelbaseChange, d: 3 },
+        { head: ['DAMPER', 'TRAVEL', '(mm)'], get: (r) => r.damperTravel, d: 3 },
+        { head: ['SPRING', 'TRAVEL', '(mm)'], get: (r) => r.springTravel, d: 3 },
+      ], a.combined));
   }
   L.push('');
   return L.join('\n');

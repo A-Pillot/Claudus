@@ -8,7 +8,7 @@
  * top must stay on the strut axis. The system is solved with Levenberg-Marquardt, which copes with the
  * redundant equations that revolutes and rocker axes produce.
  */
-import { add, cross, dist, dot, mat3MulVec, norm, normalize, rotFromVec, scale, sub, type Vec3 } from '../math/vec3.js';
+import { add, cross, dist, dot, mat3MulVec, norm, normalize, rad, rotateAbout, rotFromVec, scale, sub, type Vec3 } from '../math/vec3.js';
 import { lmStep, norm2 } from '../math/linalg.js';
 import { GenType, GROUND, NONE, dataPoints, findGen, hasGen, type Template } from '../template/types.js';
 import { expandPoints } from '../template/define.js';
@@ -23,6 +23,11 @@ export interface Drive {
   rack?: number;
   /** Ground height under the second wheel of a full-axle template. Defaults to groundZ. */
   groundZ2?: number;
+  /**
+   * Steering box axis (two points). When set, `rack` is the steering arm angle in degrees and the rack points
+   * turn about this axis instead of sliding along Y.
+   */
+  steerAxis?: [Vec3, Vec3];
 }
 
 /** A wheel of the mechanism: template indexes of its centre and stub axle points. */
@@ -244,7 +249,8 @@ export class Mechanism {
 
   private groundPoint(i: number, drive: Drive): Vec3 {
     let p = this.staticPoints[i];
-    if (drive.rack && this.rackSet.has(i)) p = [p[0], p[1] + drive.rack, p[2]];
+    if (drive.rack && this.rackSet.has(i))
+      p = drive.steerAxis ? rotateAbout(p, drive.steerAxis[0], normalize(sub(drive.steerAxis[1], drive.steerAxis[0])), rad(drive.rack)) : [p[0], p[1] + drive.rack, p[2]];
     return drive.body ? drive.body(p) : p;
   }
 

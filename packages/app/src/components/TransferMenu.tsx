@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { addEndFromModel, CoordSetError, DatParseError, readDat, type FileFormat } from '@claudus/core';
 import { useApp } from '../store';
+import { useModes } from '../modes';
 import { files } from '../files';
 import { TransferDialog, type TransferMode } from './TransferDialog';
 
@@ -24,7 +25,7 @@ export function TransferMenu({ onError }: { onError: (msg: string | null) => voi
     const f = await files().open('.dat');
     if (!f) return;
     try {
-      const { model: next, end } = addEndFromModel(model, readDat(f.text));
+      const { model: next, end } = addEndFromModel(model, readDat(f.text), useModes.getState().axleFit);
       useApp.setState((s) => ({ model: next, dirty: true, revision: s.revision + 1, end, art: { bump: 0, roll: 0, rack: 0 }, selected: null }));
       onError(null);
     } catch (e) {

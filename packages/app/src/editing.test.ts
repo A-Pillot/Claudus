@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createGroup, newModel } from '@claudus/core';
+import { createGroup, newModel, setAllLimits } from '@claudus/core';
+import { useModes } from './modes';
 import { useApp } from './store';
 import { coincidentWith, editSet, movePoint, pickable, useEdit } from './editing';
 
@@ -34,5 +35,19 @@ describe('group-aware editing', () => {
     expect(coincidentWith(0)).toEqual([0]);
     for (let k = 0; k < 3; k++) useApp.getState().setPoint(1, k, pts[0][k]);
     expect(coincidentWith(0)).toEqual([0, 1]);
+  });
+
+  it('stop a joggled point at its limit box when in use, and grow it when not', () => {
+    useApp.getState().setModel(newModel(1, 'front'), 'a.dat');
+    useApp.setState((s) => ({ model: setAllLimits(s.model, [2, 2, 2], [2, 2, 2]) }));
+    const z0 = useApp.getState().model.front!.points[0][2];
+    useModes.getState().set({ limitsVisible: true, limitsUse: true });
+    movePoint(0, [0, 0, 10]);
+    expect(useApp.getState().model.front!.points[0][2]).toBeCloseTo(z0 + 2);
+    useModes.getState().set({ limitsUse: false });
+    movePoint(0, [0, 0, 10]);
+    expect(useApp.getState().model.front!.points[0][2]).toBeCloseTo(z0 + 12);
+    useApp.getState().undo();
+    expect(useApp.getState().model.front!.points[0][2]).toBeCloseTo(z0 + 2);
   });
 });

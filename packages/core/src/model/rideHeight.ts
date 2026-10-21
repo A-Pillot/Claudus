@@ -29,7 +29,7 @@ const ENDS: End[] = ['front', 'rear'];
 const ends = (m: Model) => ENDS.filter((e) => m[e]);
 
 const templateOf = (m: Model, s: SuspensionData) => m.templates?.find((t) => t.slot === s.templateSlot) ?? getTemplate(s.templateSlot);
-const cornerOf = (m: Model, end: End) => new Corner(m[end]!, end, templateOf(m, m[end]!));
+export const cornerOf = (m: Model, end: End) => new Corner(m[end]!, end, templateOf(m, m[end]!));
 
 /** Template indexes of springs 1 and 2 (suspension end, body end), where the template has them. */
 function springIndexes(c: Corner): ([number, number] | undefined)[] {
@@ -79,7 +79,7 @@ const withSprings = (m: Model): Model => {
 const endData = (m: Model, end: End): EndCompliance => complianceOf(m)[end] ?? defaultEndCompliance();
 
 /** Move one end by a bump (and a body rotation already applied to its points), keeping spring state. */
-function moveEnd(m: Model, end: End, points: Vec3[], groundZ: number, bump: number, data: ComplianceData): SuspensionData {
+export function moveEnd(m: Model, end: End, points: Vec3[], groundZ: number, bump: number, data: ComplianceData): SuspensionData {
   const s = m[end]!;
   const before = cornerOf(m, end);
   const L0 = springLengths(before, 0);

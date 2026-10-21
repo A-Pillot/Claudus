@@ -3,8 +3,9 @@
  * Joggling and dragging go through `movePoint`, which is group aware and recorded for undo by the store.
  */
 import { create } from 'zustand';
-import { GROUND, dataPoints, getTemplate, groupIndexes, groupsOfEnd, hasTemplate, translatePoints, type Vec3 } from '@claudus/core';
-import { useApp } from './store';
+import { GROUND, constrainToLimit, limitOf, dataPoints, getTemplate, groupIndexes, groupsOfEnd, hasTemplate, translatePoints, type Vec3 } from '@claudus/core';
+import { growLimit, useApp } from './store';
+import { useModes } from './modes';
 import { VIEW_AXES, isOrtho, type StdView } from './viewCtl';
 
 export type ModifyMode = 'edit' | 'joggle' | 'drag';
@@ -96,11 +97,21 @@ export function pickable(index: number): boolean {
   return !!tp && (tp.part1 === GROUND || tp.part2 === GROUND);
 }
 
-/** Move point `index` (and its group) by `delta` mm. */
+/** Move point `index` (and its group) by `delta` mm. With limit boxes in use the picked point stops at its box. */
 export function movePoint(index: number, delta: Vec3): void {
   const { model, end } = useApp.getState();
-  if (!model[end] || !delta.every(Number.isFinite) || delta.every((d) => d === 0)) return;
-  const next = translatePoints(model, end, editSet(index), delta);
+  const data = model[end];
+  if (!data || !delta.every(Number.isFinite) || delta.every((d) => d === 0)) return;
+  const p = data.points[index];
+  let d = delta;
+  if (useModes.getState().limitsUse) {
+    const to = constrainToLimit(limitOf(model, end, index), [p[0] + delta[0], p[1] + delta[1], p[2] + delta[2]], true).point;
+    d = [to[0] - p[0], to[1] - p[1], to[2] - p[2]];
+    if (d.every((v) => v === 0)) return;
+  }
+  const set = editSet(index);
+  let next = translatePoints(model, end, set, d);
+  for (const i of set) next = growLimit(next, end, i);
   useApp.setState((s) => ({ model: next, dirty: true, revision: s.revision + 1 }));
 }
 

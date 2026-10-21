@@ -107,6 +107,16 @@ export interface ComplianceData {
   forceSets: ForceSet[];
   /** The set shown in the 3D view and graphs. */
   activeSet: number;
+  /** Session switches from the Solve menu (not saved in the file). */
+  switches?: SolveSwitches;
+}
+
+/** Solve menu switches for compliant analysis. Absent means the default. */
+export interface SolveSwitches {
+  /** Suspension roll bar force (default on). */
+  rollBar?: boolean;
+  /** Bush rotation pre-loads (default off). */
+  bushPreload?: boolean;
 }
 
 export const defaultSettings = (): ComplianceSettings => ({
