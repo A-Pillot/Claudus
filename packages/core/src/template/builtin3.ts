@@ -176,9 +176,51 @@ const type21 = defineTemplate({
   ]),
 });
 
-export const RIGID_AXLES: Template[] = [type5, type8, type9, type21];
+/**
+ * Type 29: twist beam. Two trailing arms pivot on body bushes and are joined by a cross beam. Kinematically
+ * the arms meet at a ball joint at the beam centre (a shear point) that is held on the centre plane, so in
+ * bump both arms rotate about the pivot line and in roll each rotates about the line from its pivot to the
+ * beam centre. In compliant mode the centre joint becomes the beam: stiff in bending and twisting about
+ * the shear axis (points 3 to 16) at the end's roll bar rate.
+ */
+const ARM_PIVOT: Vec3 = [2550, 600, 340];
+const type29 = defineTemplate({
+  slot: 29,
+  label: 'Twist Beam - Twin Wheel',
+  fullAxle: true,
+  parts: [
+    { label: 'Right trailing arm', points: [1, 3, 4, 7, 8, 9, 17, 19, 20] },
+    { label: 'Left trailing arm', points: [2, 10, 11, 12, 15, 16, 18, 19, 21] },
+  ],
+  ground: [1, 2, 5, 6, 13, 14],
+  points: byNo([
+    pt(1, 'Trailing arm body point right', ARM_PIVOT),
+    pt(2, 'Trailing arm body point left', mirrorY(ARM_PIVOT)),
+    { no: 3, label: 'Shear point right', def: [2800, 300, 290], gen: G.ShearPoint },
+    { no: 4, label: 'Right damper lower trailing arm end', def: [3080, 600, 260], gen: G.Damper1ToSuspension },
+    { no: 5, label: 'Right damper body end', def: [3100, 580, 650], gen: G.Damper1ToBody },
+    { no: 6, label: 'Right upper spring pivot point', def: [2900, 580, 540], gen: G.Spring1ToBody },
+    { no: 7, label: 'Right lower spring pivot point', def: [2900, 580, 290], gen: G.Spring1ToSuspension },
+    { no: 8, label: 'Wheel spindle point 1', def: [X, WC - 100, R], gen: G.StubAxle },
+    { no: 9, label: 'Wheel centre point 1', def: [X, WC, R], gen: G.WheelCentre },
+    { no: 10, label: 'Wheel centre point 2', def: [X, -WC, R], gen: G.WheelCentre2 },
+    { no: 11, label: 'Wheel spindle point 2', def: [X, -(WC - 100), R], gen: G.StubAxle2 },
+    { no: 12, label: 'Left damper lower trailing arm end', def: [3080, -600, 260], gen: G.Damper2ToSuspension },
+    { no: 13, label: 'Left damper body end', def: [3100, -580, 650], gen: G.Damper2ToBody },
+    { no: 14, label: 'Left upper spring pivot point', def: [2900, -580, 540], gen: G.Spring2ToBody },
+    { no: 15, label: 'Left lower spring pivot point', def: [2900, -580, 290], gen: G.Spring2ToSuspension },
+    { no: 16, label: 'Shear point left', def: [2800, -300, 290], gen: G.ShearPoint },
+    pt(17, 'Twist beam point right', [2800, 560, 320]),
+    pt(18, 'Twist beam point left', [2800, -560, 320]),
+    { no: 19, label: 'Centre connection point', def: [2800, 0, 300], gen: G.ShearPoint },
+    { no: 20, label: 'Part 1 C of G', def: [2800, 620, 320], gen: G.PartCofG },
+    { no: 21, label: 'Part 2 C of G', def: [2800, -620, 320], gen: G.PartCofG },
+  ]),
+});
 
-export const RIGID_AXLE_ROLLING_RADIUS: Record<number, number> = { 5: R, 8: R, 9: R, 21: R };
+export const RIGID_AXLES: Template[] = [type5, type8, type9, type21, type29];
+
+export const RIGID_AXLE_ROLLING_RADIUS: Record<number, number> = { 5: R, 8: R, 9: R, 21: R, 29: R };
 
 /** Types 23 and 26: type 1 converted to a full axle, with an anti-roll bar or a two-part compliant rack. */
 export function twoSidedTemplates(type1: Template): Template[] {

@@ -8,7 +8,7 @@
  * top must stay on the strut axis. The system is solved with Levenberg-Marquardt, which copes with the
  * redundant equations that revolutes and rocker axes produce.
  */
-import { add, cross, dist, mat3MulVec, norm, normalize, rotFromVec, scale, sub, type Vec3 } from '../math/vec3.js';
+import { add, cross, dist, dot, mat3MulVec, norm, normalize, rotFromVec, scale, sub, type Vec3 } from '../math/vec3.js';
 import { lmStep, norm2 } from '../math/linalg.js';
 import { GenType, GROUND, NONE, dataPoints, findGen, hasGen, type Template } from '../template/types.js';
 import { expandPoints } from '../template/define.js';
@@ -61,6 +61,11 @@ export class Mechanism {
   private readonly coincidences: { point: number; body: number }[] = [];
   private readonly links: { a: number; b: number; length: number }[] = [];
   private readonly struts: { top: number; slider: number; end: number }[] = [];
+  /**
+   * Twist beam centre joints (shear points joining two moving parts): held on the body's centre plane, and
+   * the two arms may only turn relative to each other about the body's lateral axis.
+   */
+  private readonly shearLocks: { point: number; a: number; b: number }[] = [];
   /** Bodies attached only along one line (a link carrying an extra point): their spin about that line is held. */
   private readonly spinLocks: { body: number; axis: Vec3 }[] = [];
   /** One wheel for a corner template, two (right then left) for a full-axle template. */
@@ -151,6 +156,18 @@ export class Mechanism {
         if (src.kind === 'body' && src.body === b) continue;
         this.coincidences.push({ point: i, body: b });
       }
+    });
+
+    // A twist beam's two arms meet at a shear point. Kinematically that is a ball joint whose sideways
+    // position is held, so each arm rotates about the line from its body pivot to the beam centre in roll,
+    // and both about the pivot line in bump. Compliance then adds the beam's torsion and bending stiffness.
+    template.points.forEach((p, i) => {
+      if (!hasGen(p, GenType.ShearPoint)) return;
+      if (p.part1 === NONE || p.part2 === NONE || p.part1 === GROUND || p.part2 === GROUND) return;
+      const a = bodyOfPart.get(p.part1);
+      const b = bodyOfPart.get(p.part2);
+      if (a === undefined || b === undefined) return;
+      this.shearLocks.push({ point: i, a, b });
     });
 
     for (let part = 1; part <= nParts; part++) {
@@ -252,6 +269,18 @@ export class Mechanism {
       const o = this.bodies[l.body].offset;
       // twist component of the body's rotation vector, scaled to be comparable with mm residuals
       r.push(100 * (x[o + 3] * l.axis[0] + x[o + 4] * l.axis[1] + x[o + 5] * l.axis[2]));
+    }
+    for (const l of this.shearLocks) {
+      const i = l.point;
+      const ref = this.groundPoint(i, { ...drive, rack: 0 });
+      const axis = (v: Vec3): Vec3 => (drive.body ? sub(drive.body(add(this.staticPoints[i], v)), ref) : v);
+      r.push(dot(sub(pos(i), ref), axis([0, 1, 0])));
+      // Relative rotation of the arms, Ra Rbᵀ, as sin(angle) x axis; its fore-aft part must vanish.
+      const Ra = rotFromVec(x.slice(this.bodies[l.a].offset + 3, this.bodies[l.a].offset + 6) as Vec3);
+      const Rb = rotFromVec(x.slice(this.bodies[l.b].offset + 3, this.bodies[l.b].offset + 6) as Vec3);
+      const M = [0, 1, 2].map((r1) => [0, 1, 2].map((c) => Ra[3 * r1] * Rb[3 * c] + Ra[3 * r1 + 1] * Rb[3 * c + 1] + Ra[3 * r1 + 2] * Rb[3 * c + 2]));
+      const w: Vec3 = [(M[2][1] - M[1][2]) / 2, (M[0][2] - M[2][0]) / 2, (M[1][0] - M[0][1]) / 2];
+      r.push(100 * dot(w, axis([1, 0, 0])));
     }
     for (const s of this.struts) {
       const P = pos(s.slider);
