@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { newModel } from '../src/model/new.js';
 import { Corner } from '../src/solver/corner.js';
 import { bumpSweep } from '../src/results/derivatives.js';
-import { deviation, interpolate, lineFromData, sortLine } from '../src/optimise/lines.js';
+import { deviation, interpolate, lineFromData, sortUserLine } from '../src/optimise/lines.js';
 import { kinematicSum, type SumTarget } from '../src/optimise/sum.js';
 import { optimise, parameterValue, runOptimiser, withParameter, type OptimiserParameter } from '../src/optimise/optimiser.js';
 import { getTemplate } from '../src/template/registry.js';
@@ -19,7 +19,7 @@ describe('user lines', () => {
     const pts: [number, number][] = [[0, 0], [10, 10]];
     expect(interpolate(pts, 5)).toBe(5);
     expect(interpolate(pts, 11)).toBeUndefined();
-    expect(sortLine({ sweep: 'bump', variable: 'camber', end: 'front', points: [[10, 1], [0, 2]] }).points[0][0]).toBe(0);
+    expect(sortUserLine({ sweep: 'bump', variable: 'camber', end: 'front', points: [[10, 1], [0, 2]] }).points[0][0]).toBe(0);
   });
 
   it('a line copied from the data has zero deviation, and an offset line deviates by the offset', () => {

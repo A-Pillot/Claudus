@@ -24,7 +24,7 @@ export interface UserLineSet {
 export const lineKey = (l: Pick<UserLine, 'sweep' | 'variable' | 'end'>) => `${l.end}:${l.sweep}:${l.variable}`;
 
 /** Sort a user line's points into ascending x, as SHARK does when its editor closes. */
-export const sortLine = (l: UserLine): UserLine => ({ ...l, points: [...l.points].sort((a, b) => a[0] - b[0]) });
+export const sortUserLine = (l: UserLine): UserLine => ({ ...l, points: [...l.points].sort((a, b) => a[0] - b[0]) });
 
 /** Linear interpolation on a polyline; undefined outside its x range. */
 export function interpolate(points: [number, number][], x: number): number | undefined {
@@ -78,5 +78,5 @@ export function lineFromData(rows: Row[], sweep: Sweep, variable: string, end: E
   const points = rows
     .map((r) => [sweepX(sweep, r), rowValue(r, variable)] as [number, number | undefined])
     .filter((p): p is [number, number] => p[1] !== undefined && Number.isFinite(p[1]));
-  return sortLine({ sweep, variable, end, points });
+  return sortUserLine({ sweep, variable, end, points });
 }
