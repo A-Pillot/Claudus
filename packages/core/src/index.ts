@@ -2,6 +2,7 @@ export * from './math/vec3.js';
 export * from './math/linalg.js';
 export * from './template/types.js';
 export * from './template/define.js';
+export * from './template/axle.js';
 export * from './template/builtin.js';
 export * from './template/registry.js';
 export * from './model/types.js';

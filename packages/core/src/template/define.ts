@@ -8,8 +8,9 @@ export function dummyPosition(at: Vec3, a: Vec3, b: Vec3, offset: number): Vec3 
   return [at[0] + (d[0] / n) * offset, at[1] + (d[1] / n) * offset, at[2] + (d[2] / n) * offset];
 }
 
-const placeDummy = (d: DummySpec, get: (no: number) => Vec3 | undefined): Vec3 => {
-  const [at, a, b] = [get(d.at), get(d.dir[0]), get(d.dir[1])];
+export const placeDummy = (d: DummySpec, get: (no: number) => Vec3 | undefined): Vec3 => {
+  const at = get(d.at);
+  const [a, b] = d.dir ? [get(d.dir[0]), get(d.dir[1])] : [[0, 0, 0] as Vec3, d.vec];
   if (!at || !a || !b) throw new Error(`Dummy point refers to an unknown point`);
   return dummyPosition(at, a, b, d.offset);
 };
@@ -50,6 +51,7 @@ export interface TemplateSpec {
   points: PointSpec[];
   graphics?: GraphicElement[];
   fullAxle?: boolean;
+  rigidAxle?: boolean;
 }
 
 /**
@@ -101,6 +103,7 @@ export function defineTemplate(spec: TemplateSpec): Template {
     points,
     graphics: spec.graphics ?? defaultGraphics(spec),
     fullAxle: spec.fullAxle,
+    ...(spec.rigidAxle ? { rigidAxle: true } : {}),
     source: 'builtin',
   };
 }

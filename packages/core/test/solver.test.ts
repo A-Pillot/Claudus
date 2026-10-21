@@ -3,6 +3,7 @@ import { dist, type Vec3 } from '../src/math/vec3.js';
 import { Corner } from '../src/solver/corner.js';
 import { wheelLowestZ } from '../src/solver/mechanism.js';
 import { listTemplates, getTemplate } from '../src/template/registry.js';
+import { GenType, hasGen } from '../src/template/types.js';
 import { bumpSweep, rollSweep, staticValues, steerSweep, wheelGeometry } from '../src/results/derivatives.js';
 import { defaultParams } from '../src/model/types.js';
 import { hasSample, sampleModel } from './helpers.js';
@@ -22,6 +23,8 @@ function partDistances(c: Corner, pts: Vec3[]): number[] {
   const out: number[] = [];
   t.parts.forEach((_, k) => {
     const idx = t.points.map((p, i) => (p.part1 === k + 1 || p.part2 === k + 1 ? i : -1)).filter((i) => i >= 0);
+    // A rack housing is a compliant mount: in kinematics the rack link slides through it.
+    if (idx.some((i) => hasGen(t.points[i], GenType.RackMount))) return;
     for (let a = 0; a < idx.length; a++) for (let b = a + 1; b < idx.length; b++) out.push(dist(pts[idx[a]], pts[idx[b]]));
   });
   return out;
@@ -40,8 +43,10 @@ describe('kinematic solver', () => {
       expect(st.converged).toBe(true);
       const d = partDistances(c, st.points);
       d.forEach((v, i) => expect(v).toBeCloseTo(d0[i], 5));
-      const low = wheelLowestZ(st.points[c.mech.wheelCentre], st.points[c.mech.stubAxle], c.radius);
-      expect(low).toBeCloseTo(st.groundZ, 6);
+      c.sides.forEach((w, k) => {
+        const low = wheelLowestZ(st.points[w.wc], st.points[w.stub], c.radius);
+        expect(low).toBeCloseTo(k === 0 ? st.groundZ : st.drive.groundZ2!, 6);
+      });
     }
   });
 

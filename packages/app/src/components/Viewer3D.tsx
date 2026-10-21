@@ -29,7 +29,8 @@ export function Viewer3D({ corner, state }: Props) {
       <directionalLight position={[2, -3, 4]} intensity={1.2} />
       <group position={[-origin[0] * MM, 0, -origin[2] * MM]} scale={MM}>
         <Side corner={corner} points={state.right.points} mirrored={false} />
-        <Side corner={corner} points={state.leftMirror.points.map(mirrorY)} mirrored />
+        {/* A corner model's left side is drawn as the mirror image; a full-axle template already has both. */}
+        {state.leftMirror && <Side corner={corner} points={state.leftMirror.points.map(mirrorY)} mirrored />}
         <Ground z={state.right.groundZ} x={wc[0]} />
         <RollCentre rc={state.rollCentre} />
       </group>
@@ -57,9 +58,11 @@ function Side({ corner, points, mirrored }: { corner: Corner; points: Vec3[]; mi
     return 0;
   };
 
-  const spring = [findGen(t, GenType.Spring1ToSuspension), findGen(t, GenType.Spring1ToBody)];
-  const damper = [findGen(t, GenType.Damper1ToSuspension), findGen(t, GenType.Damper1ToBody)];
-  const width = tyreWidths[(corner.end === 'front' ? 0 : 2) + (mirrored ? 0 : 1)] || 150;
+  const pairs = (a: GenType, b: GenType) => [findGen(t, a), findGen(t, b)];
+  const springs = [pairs(GenType.Spring1ToSuspension, GenType.Spring1ToBody), pairs(GenType.Spring2ToSuspension, GenType.Spring2ToBody)];
+  const dampers = [pairs(GenType.Damper1ToSuspension, GenType.Damper1ToBody), pairs(GenType.Damper2ToSuspension, GenType.Damper2ToBody)];
+  // Tyre widths are stored left then right for each end; wheel 0 is the right-hand one.
+  const width = (wheel: number) => tyreWidths[(corner.end === 'front' ? 0 : 2) + (mirrored || wheel === 1 ? 0 : 1)] || 150;
 
   return (
     <group>
@@ -75,9 +78,11 @@ function Side({ corner, points, mirrored }: { corner: Corner; points: Vec3[]; mi
           />
         );
       })}
-      {damper[0] && damper[1] && <Line points={[p(damper[0].no), p(damper[1].no)]} color="#ff9d4d" lineWidth={7} />}
-      {spring[0] && spring[1] && <Line points={[p(spring[0].no), p(spring[1].no)]} color="#a5e887" lineWidth={2} dashed dashSize={12} gapSize={6} />}
-      <Wheel wc={points[corner.mech.wheelCentre]} stub={points[corner.mech.stubAxle]} radius={corner.radius} width={width} />
+      {dampers.map(([a, b], k) => a && b && <Line key={`d${k}`} points={[p(a.no), p(b.no)]} color="#ff9d4d" lineWidth={7} />)}
+      {springs.map(([a, b], k) => a && b && <Line key={`s${k}`} points={[p(a.no), p(b.no)]} color="#a5e887" lineWidth={2} dashed dashSize={12} gapSize={6} />)}
+      {corner.sides.map((w, k) => (
+        <Wheel key={k} wc={points[w.wc]} stub={points[w.stub]} radius={corner.radius} width={width(k)} />
+      ))}
       {t.points.map((tp, i) => {
         if (tp.dummy) return null;
         const isGround = tp.part1 === GROUND || tp.part2 === GROUND;
