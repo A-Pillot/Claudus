@@ -9,6 +9,7 @@ import { useTwoD } from '../twod/store2d';
 import { GraphicsMenu } from './GraphicsMenu';
 import { TransferMenu } from './TransferMenu';
 import { ComplianceMenus } from './ComplianceMenu';
+import { GraphsMenu } from './GraphsMenu';
 
 export function Toolbar({ analysis }: { analysis: AnalysisState }) {
   const { model, fileName, dirty, end, setModel, setEnd, markSaved } = useApp();
@@ -57,6 +58,7 @@ export function Toolbar({ analysis }: { analysis: AnalysisState }) {
       {!two && <button onClick={exportSdf} disabled={!analysis.results || analysis.busy}>Export SDF</button>}
       {!two && <TemplateMenu onError={setError} />}
       {!two && <GraphicsMenu />}
+      {!two && <GraphsMenu results={analysis.results} busy={analysis.busy} />}
       {!two && <TransferMenu onError={setError} />}
       {!two && <ComplianceMenus />}
       <span className="sep" />

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useApp, type ComplianceDialogId } from '../store';
+import { useLab, type PanelId } from '../lab';
 
 function useMenu() {
   const [open, setOpen] = useState(false);
@@ -22,6 +23,7 @@ const DATA: [ComplianceDialogId, string][] = [
   ['rollbar', 'Roll bar rate…'],
   ['general', 'General data…'],
   ['forces', 'External forces…'],
+  ['massData', 'Mass data / C of G properties…'],
 ];
 
 /** SHARK's compliant solver switch, the Data / Compliance Data menu and the compliance Results menu. */
@@ -36,6 +38,8 @@ export function ComplianceMenus() {
   const data = useMenu();
   const res = useMenu();
   const show = (id: ComplianceDialogId, m: ReturnType<typeof useMenu>) => () => { m.setOpen(false); setDialog(id); };
+  const setPanel = useLab((s) => s.setPanel);
+  const panel = (id: PanelId) => () => { res.setOpen(false); setPanel(id, true); };
   return (
     <>
       <button className={compliant ? 'on' : ''} aria-pressed={compliant} title="Solve with compliance (bushes, springs, tyres and external forces)" onClick={() => setCompliant(!compliant)}>
@@ -63,6 +67,12 @@ export function ComplianceMenus() {
             <button onClick={show('coefficients', res)}>Compliance coefficients…</button>
             <button disabled={!compliant} onClick={show('joints', res)}>Joint deflections and forces…</button>
             <button disabled={!compliant} onClick={show('loads', res)}>Spring and tyre loads…</button>
+            <hr />
+            <button onClick={panel('kinSum')}>Kinematic sum…</button>
+            <button onClick={panel('optimiser')}>Optimiser…</button>
+            <hr />
+            <button disabled={!compliant} onClick={panel('modal')}>Modal analysis…</button>
+            <button disabled={!compliant} onClick={panel('sweep')}>Forced-damped speed sweep…</button>
           </div>
         )}
       </div>

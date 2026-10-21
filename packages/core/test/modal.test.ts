@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Corner } from '../src/solver/corner.js';
 import { newModel, newSuspension } from '../src/model/new.js';
-import { forcedSweep, modalAnalysis, displacedPoints, responseAtPhase, forcedSetup, forcedResponseAt } from '../src/compliance/modal.js';
+import { partCentroids, partMasses, forcedSweep, modalAnalysis, displacedPoints, responseAtPhase, forcedSetup, forcedResponseAt } from '../src/compliance/modal.js';
 import { defaultCompliance, defaultEndCompliance, type ComplianceData, type PartMass } from '../src/compliance/types.js';
 import { generalizedEigen, symmetricEigen } from '../src/math/eigen.js';
 import { readDat, writeDat } from '../src/io/dat.js';
@@ -63,6 +63,29 @@ describe('modal analysis', () => {
     const moves = (k: number) => displacedPoints(c, st, r.model, r.modes[k].shape, 10).some((p, i) => Math.abs(p[2] - st.points[i][2]) > 1e-3);
     expect(moves(0)).toBe(false);
     expect(moves(1)).toBe(true);
+  });
+});
+
+describe('part masses', () => {
+  it('resolves the same masses as the modal analysis', () => {
+    const c = new Corner(newSuspension(1), 'front');
+    const st = c.solve({});
+    const data = defaultCompliance();
+    const viaModal = modalAnalysis(c, st, data).masses;
+    const direct = partMasses(c, st, defaultEndCompliance());
+    expect(direct).toEqual(viaModal);
+    expect(partCentroids(c, st)).toHaveLength(c.template.parts.length);
+  });
+
+  it('puts a point-defined C of G at that point', () => {
+    const c = new Corner(newSuspension(1), 'front');
+    const st = c.solve({});
+    const e = defaultEndCompliance();
+    const no = c.template.points.find((p) => !p.dummy && p.part1 === 1)!.no;
+    e.masses = [{ part: 1, cog: { kind: 'point', point: no }, zAxis: { kind: 'none' }, xzPlane: { kind: 'none' }, mass: 5, inertia: [1, 2, 3, 0, 0, 0] }];
+    const m = partMasses(c, st, e)[0];
+    expect(m.mass).toBe(5);
+    expect(m.cog).toEqual(st.points[c.mech.index.get(no)!]);
   });
 });
 

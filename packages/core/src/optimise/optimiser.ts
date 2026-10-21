@@ -98,7 +98,7 @@ export type OptimiserEvent =
   | { type: 'start'; sum: KinematicSum }
   | { type: 'sensitivity'; iteration: number; parameters: ParameterState[] }
   /** One accepted change: a parameter (by index) to a value, or parameter -1 for a pattern move. */
-  | { type: 'step'; iteration: number; parameter: number; value: number; sum: number }
+  | { type: 'step'; iteration: number; parameter: number; value: number; sum: number; /** Every parameter's value after this step. */ values: number[] }
   | { type: 'done'; model: Model; sum: KinematicSum; iterations: number; parameters: ParameterState[] };
 
 export interface OptimiserProblem {
@@ -179,7 +179,7 @@ export function* optimise(problem: OptimiserProblem): Generator<OptimiserEvent, 
           sum = t;
           s.value = v;
           moved = true;
-          yield { type: 'step', iteration: it, parameter: i, value: v, sum };
+          yield { type: 'step', iteration: it, parameter: i, value: v, sum, values: states.map((q) => q.value) };
         }
         if (moved) break;
       }
@@ -198,7 +198,7 @@ export function* optimise(problem: OptimiserProblem): Generator<OptimiserEvent, 
         model = trial;
         sum = t;
         states.forEach((s, i) => (s.value += delta[i]));
-        yield { type: 'step', iteration: it, parameter: -1, value: 0, sum };
+        yield { type: 'step', iteration: it, parameter: -1, value: 0, sum, values: states.map((q) => q.value) };
       }
     }
     if (!(sum < before - 1e-12)) {

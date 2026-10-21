@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useAnalysis, useAxleState, useComplianceDetail, useCorner } from './derived';
 import { useApp } from './store';
+import { useLab } from './lab';
+import { useDisplayedState, useModal } from './display';
 import { Toolbar } from './components/Toolbar';
 import { PointTable } from './components/PointTable';
 import { ParamsPanel } from './components/ParamsPanel';
@@ -13,6 +15,10 @@ import { GroupsPanel } from './components/GroupsPanel';
 import { SdfView } from './components/SdfView';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ComplianceDialogs } from './components/ComplianceDialogs';
+import { EditUserLineDialog, ManageUserLinesDialog } from './components/UserLineDialogs';
+import { KinSumPanel, OptimiserPanel } from './components/SumPanels';
+import { DisplayModeBar, ModalPanel, SweepPanel } from './components/ModalPanels';
+import { MassDialog } from './components/MassDialog';
 import { TwoDApp } from './twod/TwoDApp';
 import { useTwoD } from './twod/store2d';
 
@@ -25,6 +31,10 @@ export function App() {
   const analysis = useAnalysis();
   const compliant = useApp((s) => s.compliant);
   const detail = useComplianceDetail(corner);
+  const display = useLab((s) => s.display);
+  const modalOpen = useLab((s) => s.panels.modal);
+  const modal = useModal(corner, state, compliant && (display.mode === 'mode' || modalOpen));
+  const shown = useDisplayedState(corner, state, modal);
   const selected = useApp((s) => s.selected);
   const revision = useApp((s) => s.revision);
   const [side, setSide] = useState<SideTab>('points');
@@ -52,9 +62,11 @@ export function App() {
       <main className="view">
         {corner && state ? (
           <>
-            <ErrorBoundary resetKey={revision}><Viewer3D corner={corner} state={state} detail={detail} /></ErrorBoundary>
+            <ErrorBoundary resetKey={revision}><Viewer3D corner={corner} state={shown.state ?? state} detail={detail} /></ErrorBoundary>
             <AddBanner />
             {compliant && <div className="overlay badge">Compliant solution</div>}
+            {shown.caption && <div className="overlay caption" data-testid="display-caption">{shown.caption}</div>}
+            <DisplayModeBar modal={modal} />
             {label && <div className="overlay">Point {label.no}: {label.label}</div>}
             {!state.right.converged && <div className="overlay warn">The suspension cannot reach this position.</div>}
           </>
@@ -78,6 +90,13 @@ export function App() {
         </div>
       </section>
       <ComplianceDialogs corner={corner} state={state} detail={detail} />
+      <MassDialog corner={corner} state={state} />
+      <EditUserLineDialog />
+      <ManageUserLinesDialog />
+      <KinSumPanel />
+      <OptimiserPanel />
+      <ModalPanel modal={modal} />
+      <SweepPanel corner={corner} state={state} />
     </div>
   );
 }
