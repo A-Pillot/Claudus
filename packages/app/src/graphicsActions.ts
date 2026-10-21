@@ -47,7 +47,8 @@ export function startAdd(option: ElementOption): void {
 }
 
 export function cancelAdd(): void {
-  useApp.getState().setAddMode(null);
+  // Only when an add is under way: an update on every Escape would re-render open dialogs mid-keypress.
+  if (useApp.getState().addMode) useApp.getState().setAddMode(null);
 }
 
 function finishAdd(): void {

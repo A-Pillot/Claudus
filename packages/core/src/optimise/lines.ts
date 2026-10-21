@@ -1,6 +1,7 @@
 /**
  * User lines (target curves drawn on the results graphs) and the deviation of a result from them.
  */
+import { mirrorY } from '../math/vec3.js';
 import type { End } from '../model/types.js';
 import type { BumpRow, RollRow, SteerRow } from '../results/derivatives.js';
 
@@ -53,10 +54,9 @@ export const sweepX = (sweep: Sweep, row: Row): number =>
 /** A graph variable from a result row: a row field, a roll centre component, or a measurement element. */
 export function rowValue(row: Row, variable: string): number | undefined {
   const r = row as unknown as Record<string, unknown>;
-  if (variable === 'rollCentreY' || variable === 'rollCentreZ') {
-    const rc = r.rollCentre as number[] | undefined;
-    return rc ? rc[variable === 'rollCentreY' ? 1 : 2] : undefined;
-  }
+  // Vector fields are read by component: rollCentreX, tcpRightZ, hubLeftY...; the lateral roll centre is its Y.
+  const m = /^(.+)([XYZ])$/.exec(variable === 'rollCentreLateral' ? 'rollCentreY' : variable);
+  if (m && Array.isArray(r[m[1]])) return (r[m[1]] as number[])['XYZ'.indexOf(m[2])];
   const v = r[variable];
   if (typeof v === 'number') return v;
   return row.measures?.[variable];
@@ -70,7 +70,18 @@ export function rowValue(row: Row, variable: string): number | undefined {
 export function leftRows<R extends Row>(rows: R[], sweep: Sweep): R[] {
   if (sweep !== 'roll') return rows;
   return (rows as RollRow[])
-    .map((r) => ({ ...r, roll: -r.roll, rollCentre: [r.rollCentre[0], -r.rollCentre[1], r.rollCentre[2]] as RollRow['rollCentre'] }))
+    .map((r) => ({
+      ...r,
+      roll: -r.roll,
+      rollCentre: [r.rollCentre[0], -r.rollCentre[1], r.rollCentre[2]] as RollRow['rollCentre'],
+      // The mirrored vehicle's right wheel is the original left wheel mirrored.
+      tcpRight: mirrorY(r.tcpLeft),
+      tcpLeft: mirrorY(r.tcpRight),
+      hubRight: mirrorY(r.hubLeft),
+      hubLeft: mirrorY(r.hubRight),
+      tyreForce: r.tyreForceLeft,
+      tyreForceLeft: r.tyreForce,
+    }))
     .sort((a, b) => a.roll - b.roll) as unknown as R[];
 }
 

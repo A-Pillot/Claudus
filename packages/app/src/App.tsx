@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { useAnalysis, useAxleState, useComplianceDetail, useCorner } from './derived';
+import { useAnalysis, useAxleState, useComplianceDetail, useCorner, useTolerance } from './derived';
+import { useModes } from './modes';
+import { AnalysisDialogs } from './components/AnalysisDialogs';
 import { useApp } from './store';
 import { useLab } from './lab';
 import { useDisplayedState, useFreeBody, useModal } from './display';
@@ -10,6 +12,7 @@ import { Viewer3D } from './components/Viewer3D';
 import { ArticulationBar } from './components/ArticulationBar';
 import { Readouts } from './components/Readouts';
 import { Graphs } from './components/Graphs';
+import { ViewTools } from './components/ViewControls';
 import { AddBanner } from './components/GraphicsMenu';
 import { GroupsPanel } from './components/GroupsPanel';
 import { SdfView } from './components/SdfView';
@@ -19,6 +22,7 @@ import { EditUserLineDialog, ManageUserLinesDialog } from './components/UserLine
 import { KinSumPanel, OptimiserPanel } from './components/SumPanels';
 import { DisplayModeBar, FreeBodyTable, ModalPanel, SweepPanel } from './components/ModalPanels';
 import { MassDialog } from './components/MassDialog';
+import { ListingDialogs } from './components/Listings';
 import { TwoDApp } from './twod/TwoDApp';
 import { useTwoD } from './twod/store2d';
 
@@ -29,6 +33,8 @@ export function App() {
   const { corner, error } = useCorner();
   const state = useAxleState(corner);
   const analysis = useAnalysis();
+  const tolerance = useTolerance();
+  const reportErrors = useModes((s) => s.reportErrors);
   const compliant = useApp((s) => s.compliant);
   const detail = useComplianceDetail(corner);
   const display = useLab((s) => s.display);
@@ -65,12 +71,13 @@ export function App() {
           <>
             <ErrorBoundary resetKey={revision}><Viewer3D corner={corner} state={shown.state ?? state} detail={detail} ghosts={shown.ghosts} freeBody={freeBody} /></ErrorBoundary>
             <AddBanner />
+            <ViewTools />
             {compliant && <div className="overlay badge">Compliant solution</div>}
             {shown.caption && <div className="overlay caption" data-testid="display-caption">{shown.caption}</div>}
             <DisplayModeBar modal={modal} corner={corner} />
             {freeBody && <FreeBodyTable fb={freeBody} />}
             {label && <div className="overlay">Point {label.no}: {label.label}</div>}
-            {!state.right.converged && <div className="overlay warn">The suspension cannot reach this position.</div>}
+            {!state.right.converged && reportErrors && <div className="overlay warn">The suspension cannot reach this position.</div>}
           </>
         ) : (
           <div className="muted pad">{error ?? 'Solving…'}</div>
@@ -83,16 +90,19 @@ export function App() {
       <section className="bottom">
         <Tabs value={bottom} onChange={setBottom} tabs={[['graphs', 'Graphs'], ['sdf', 'SDF listing']]}>
           {analysis.busy && <span className="muted small">calculating…</span>}
+          {tolerance.busy && <span className="muted small">tolerance analysis…</span>}
           {analysis.error && <span className="error">{analysis.error}</span>}
         </Tabs>
         <div className="scroll">
           <ErrorBoundary resetKey={analysis.results}>
-            {bottom === 'graphs' ? <Graphs results={analysis.results} /> : <SdfView analysis={analysis} />}
+            {bottom === 'graphs' ? <Graphs results={analysis.results} tolerance={tolerance.result} /> : <SdfView analysis={analysis} />}
           </ErrorBoundary>
         </div>
       </section>
       <ComplianceDialogs corner={corner} state={state} detail={detail} />
       <MassDialog corner={corner} state={state} />
+      <AnalysisDialogs />
+      <ListingDialogs results={analysis.results} />
       <EditUserLineDialog />
       <ManageUserLinesDialog />
       <KinSumPanel />

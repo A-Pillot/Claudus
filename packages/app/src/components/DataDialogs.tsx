@@ -5,7 +5,7 @@ import {
 } from '@claudus/core';
 import { useApp } from '../store';
 import { editModel, useDataUi } from '../dataUi';
-import { useSettings } from '../settings';
+import { useViewCtl } from '../viewCtl';
 import { templatesForModel } from '../templates';
 import { Dlg, TextCell } from './ComplianceDialogs';
 import { NumberCell } from './PointTable';
@@ -114,8 +114,7 @@ export function DamperDialog({ onClose = close }: { onClose?: () => void }) {
 /** Data / Body Type and Edit User Body Data. */
 export function BodyDialog() {
   const body = useApp((s) => s.model.body) ?? emptyBody();
-  const show = useSettings((s) => s.settings.showBody);
-  const setSettings = useSettings((s) => s.set);
+  const show = useViewCtl((s) => s.showBodyGraphics);
   const setType = (type: number) => editModel((m) => { m.body = { ...(m.body ?? emptyBody()), type }; });
   return (
     <Dlg title="Body type" onClose={close}>
@@ -126,7 +125,7 @@ export function BodyDialog() {
         </select>
       </div>
       <label className="row">
-        <input type="checkbox" checked={show} onChange={(e) => setSettings({ showBody: e.target.checked })} /> Show the body in the 3D view
+        <input type="checkbox" checked={show} onChange={(e) => useViewCtl.getState().set({ showBodyGraphics: e.target.checked })} /> Show the body in the 3D view
       </label>
       <div className="row">
         <button disabled={body.type !== BODY_USER} onClick={() => useDataUi.getState().setDialog('userBody')}>Edit user body data…</button>

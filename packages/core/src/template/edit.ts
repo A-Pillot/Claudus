@@ -36,7 +36,7 @@ export function addPointToTemplate(t: Template, points: Vec3[], np: NewPoint): P
 }
 
 /** The point positions the model has for each data point number. */
-export function pointPositions(t: Template, points: Vec3[]): Map<number, Vec3> {
+export function modelPointMap(t: Template, points: Vec3[]): Map<number, Vec3> {
   return new Map(dataPoints(t).map((p, i) => [p.no, points[i]]));
 }
 

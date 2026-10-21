@@ -24,37 +24,29 @@ function useMenu() {
 const MODE_NAMES: [PlaceMode, string][] = [['abs', 'Absolute position…'], ['rel', 'Relative to a point…'], ['between', 'Between two points…']];
 const ELEMENTS: ElementKind[] = ['spring1', 'spring2', 'damper1', 'damper2'];
 
-/** SHARK's Data menu: the model's data sets, body and tyres, and the raw text of the data file. */
-export function DataMenu() {
-  const { open, setOpen, ref } = useMenu();
+/** Items added to the Data menu: titles, tyres, body, dampers, model properties and the raw file text. */
+export function DataItems({ close }: { close: () => void }) {
   const bodyType = useApp((s) => s.model.body?.type ?? 0);
-  const show = (d: DataDialogId) => () => { setOpen(false); useDataUi.getState().setDialog(d); };
+  const show = (d: DataDialogId) => () => { close(); useDataUi.getState().setDialog(d); };
   return (
-    <div className="menu" ref={ref}>
-      <button onClick={() => setOpen(!open)} className={open ? 'on' : ''}>Data ▾</button>
-      {open && (
-        <div className="menulist" role="menu">
-          <button onClick={show('properties')}>Model properties…</button>
-          <hr />
-          <button onClick={show('titles')}>Titles…</button>
-          <button onClick={show('tyres')}>Tyre sizes…</button>
-          <button onClick={show('body')}>Body type…</button>
-          <button disabled={bodyType !== BODY_USER} onClick={show('userBody')} title={bodyType === BODY_USER ? '' : 'Choose the user defined body type first'}>Edit user body data…</button>
-          <button onClick={show('dampers')}>Damper properties…</button>
-          <hr />
-          <button onClick={show('textEdit')}>File text edit…</button>
-        </div>
-      )}
-    </div>
+    <>
+      <hr />
+      <button onClick={show('properties')}>Model properties…</button>
+      <button onClick={show('titles')}>Titles…</button>
+      <button onClick={show('tyres')}>Tyre sizes…</button>
+      <button onClick={show('body')}>Body type…</button>
+      <button disabled={bodyType !== BODY_USER} onClick={show('userBody')} title={bodyType === BODY_USER ? '' : 'Choose the user defined body type first'}>Edit user body data…</button>
+      <button onClick={show('dampers')}>Damper properties…</button>
+      <button onClick={show('textEdit')}>File text edit…</button>
+    </>
   );
 }
 
-/** SHARK's Edit menu additions: All Settings, Add Point and Add to Model. */
-export function EditMenu({ onError }: { onError: (msg: string | null) => void }) {
-  const { open, setOpen, ref } = useMenu();
+/** Items added to the Edit menu: All Settings, Add Point and Add to Model. */
+export function EditItems({ onError, close }: { onError: (msg: string | null) => void; close: () => void }) {
   useApp((s) => s.revision);
   const t = currentTemplate();
-  const go = (f: () => void) => () => { setOpen(false); f(); };
+  const go = (f: () => void) => () => { close(); f(); };
   const addElement = (kind: ElementKind) => go(() => {
     onError(null);
     pickInView(`Add ${elementName(kind)}`, ['spring or damper end on the body', 'end on the suspension'], (p) => {
@@ -66,29 +58,23 @@ export function EditMenu({ onError }: { onError: (msg: string | null) => void })
     });
   });
   return (
-    <div className="menu" ref={ref}>
-      <button onClick={() => setOpen(!open)} className={open ? 'on' : ''}>Edit ▾</button>
-      {open && (
-        <div className="menulist wide" role="menu">
-          <button onClick={go(() => useDataUi.getState().setDialog('allSettings'))}>All settings… (Ctrl+S)</button>
-          <hr />
-          <div className="menuhead">Add point</div>
-          {MODE_NAMES.map(([m, label]) => <button key={'g' + m} disabled={!t} onClick={go(() => openAddPoint('point', 'ground', m))}>To body, {label}</button>)}
-          {MODE_NAMES.map(([m, label]) => <button key={'p' + m} disabled={!t} onClick={go(() => openAddPoint('point', 'part', m))}>To part, {label}</button>)}
-          <hr />
-          <div className="menuhead">Add to model</div>
-          {ELEMENTS.map((k) => {
-            const exists = !!t && hasElement(t, k);
-            return (
-              <button key={k} disabled={!t || exists} title={exists ? `${elementName(k)} is already in this template` : 'Pick the body end, then the suspension end'} onClick={addElement(k)}>
-                {elementName(k)} (pick two points)
-              </button>
-            );
-          })}
-          {MODE_NAMES.map(([m, label]) => <button key={'c' + m} disabled={!t} onClick={go(() => openAddPoint('cog', 'part', m))}>Part C of G, {label}</button>)}
-        </div>
-      )}
-    </div>
+    <>
+      <hr />
+      <button onClick={go(() => useDataUi.getState().setDialog('allSettings'))}>All settings… (Ctrl+,)</button>
+      <div className="menuhead">Add point</div>
+      {MODE_NAMES.map(([m, label]) => <button key={'g' + m} disabled={!t} onClick={go(() => openAddPoint('point', 'ground', m))}>To body, {label}</button>)}
+      {MODE_NAMES.map(([m, label]) => <button key={'p' + m} disabled={!t} onClick={go(() => openAddPoint('point', 'part', m))}>To part, {label}</button>)}
+      <div className="menuhead">Add to model</div>
+      {ELEMENTS.map((k) => {
+        const exists = !!t && hasElement(t, k);
+        return (
+          <button key={k} disabled={!t || exists} title={exists ? `${elementName(k)} is already in this template` : 'Pick the body end, then the suspension end'} onClick={addElement(k)}>
+            {elementName(k)} (pick two points)
+          </button>
+        );
+      })}
+      {MODE_NAMES.map(([m, label]) => <button key={'c' + m} disabled={!t} onClick={go(() => openAddPoint('cog', 'part', m))}>Part C of G, {label}</button>)}
+    </>
   );
 }
 

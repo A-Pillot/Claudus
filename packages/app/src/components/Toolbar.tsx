@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { formatSdf, listTemplates, newModel, newSuspension, getTemplate, writeDat, writeTwoD, type End, type TwoDType } from '@claudus/core';
 import type { AnalysisState } from '../derived';
 import { useApp } from '../store';
@@ -12,9 +12,11 @@ import { ComplianceMenus } from './ComplianceMenu';
 import { GraphsMenu } from './GraphsMenu';
 import { RideHeightMenu } from './RideHeightMenu';
 import { ViewMenu } from './ViewMenu';
-import { DataDialogsHost, DataMenu, EditMenu, HelpMenu, RecentMenu } from './DataMenu';
+import { DataDialogsHost, HelpMenu, RecentMenu } from './DataMenu';
 import { loadFileText, optimiserSnapshot } from '../openFile';
 import { editModel } from '../dataUi';
+import { EditMenu } from './EditMenu';
+import { DataMenu, SolveMenu } from './AnalysisMenu';
 
 export function Toolbar({ analysis }: { analysis: AnalysisState }) {
   const { model, fileName, dirty, end, setModel, setEnd, markSaved } = useApp();
@@ -41,6 +43,14 @@ export function Toolbar({ analysis }: { analysis: AnalysisState }) {
     const name = await files().save(fileName, writeDat({ ...out, templates: templatesForModel(out) }));
     if (name) markSaved(name);
   };
+  // Ctrl+S saves the file instead of the browser's save-page dialog.
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); void save(); }
+    };
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  });
   const exportSdf = async () => {
     if (!analysis.results || !analysis.model) return;
     await files().save(fileName.replace(/\.dat$/i, '') + '.sdf', formatSdf(analysis.model, analysis.results, fileName));
@@ -54,14 +64,15 @@ export function Toolbar({ analysis }: { analysis: AnalysisState }) {
       <RecentMenu onError={setError} />
       <button onClick={save}>Save</button>
       {!two && <button onClick={exportSdf} disabled={!analysis.results || analysis.busy}>Export SDF</button>}
+      {!two && <EditMenu onError={setError} />}
       {!two && <ViewMenu />}
       {!two && <TemplateMenu onError={setError} />}
       {!two && <DataMenu />}
-      {!two && <EditMenu onError={setError} />}
       {!two && <GraphicsMenu />}
       {!two && <GraphsMenu results={analysis.results} busy={analysis.busy} />}
       {!two && <TransferMenu onError={setError} />}
       {!two && <ComplianceMenus />}
+      {!two && <SolveMenu />}
       {!two && <RideHeightMenu onError={setError} />}
       <HelpMenu />
       <span className="sep" />

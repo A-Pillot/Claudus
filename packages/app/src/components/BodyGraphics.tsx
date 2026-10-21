@@ -3,7 +3,7 @@ import { Line } from '@react-three/drei';
 import * as THREE from 'three';
 import { bodyLines, BODY_USER, type Vec3 } from '@claudus/core';
 import { useApp } from '../store';
-import { useSettings } from '../settings';
+import { useViewCtl } from '../viewCtl';
 
 /**
  * The body graphics of Data / Body Type, drawn in the 3D view. Body lines are in car axes: x back from the front
@@ -11,7 +11,7 @@ import { useSettings } from '../settings';
  */
 export function BodyGraphics({ frontX, groundZ }: { frontX: number; groundZ: number }) {
   const body = useApp((s) => s.model.body);
-  const show = useSettings((s) => s.settings.showBody);
+  const show = useViewCtl((s) => s.showBodyGraphics);
   const lines = useMemo(() => bodyLines(body), [body]);
   const tris = useMemo(() => {
     if (body?.type !== BODY_USER || !body.facets.length) return null;

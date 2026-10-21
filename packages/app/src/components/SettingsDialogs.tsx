@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useApp } from '../store';
 import { useLab } from '../lab';
 import { useSettings } from '../settings';
+import { useViewCtl } from '../viewCtl';
 import { editModel, useDataUi } from '../dataUi';
 import { optimiserSnapshot } from '../openFile';
 import { Dlg } from './ComplianceDialogs';
@@ -13,6 +14,7 @@ const close = () => useDataUi.getState().setDialog(null);
 export function AllSettingsDialog() {
   const view = useApp((s) => s.view);
   const setView = useApp((s) => s.setView);
+  const vc = useViewCtl();
   const hasOpt = useApp((s) => !!s.model.optimiser);
   const vis = useLab((s) => s.graphVis);
   const { settings, set, setStyle, reset } = useSettings();
@@ -30,11 +32,16 @@ export function AllSettingsDialog() {
       <div className="settingsgrid" data-testid="all-settings">
         <fieldset>
           <legend>3D view</legend>
+          <p className="muted small">The same settings as View / 3D display options.</p>
           {check('Point numbers', view.pointNos, (v) => setView({ pointNos: v }))}
           {check('Point values', view.pointValues, (v) => setView({ pointValues: v }))}
           {check('Show both sides', view.bothSides, (v) => setView({ bothSides: v }))}
           {check('Triad', view.triad, (v) => setView({ triad: v }))}
-          {check('Body', settings.showBody, (v) => set({ showBody: v }))}
+          {check('Body graphics', vc.showBodyGraphics, (v) => vc.set({ showBodyGraphics: v }))}
+          {check('Springs', vc.showSprings, (v) => vc.set({ showSprings: v }))}
+          {check('Dampers', vc.showDampers, (v) => vc.set({ showDampers: v }))}
+          {check('Wheels', vc.showWheels, (v) => vc.set({ showWheels: v }))}
+          {check('Ground grid', vc.showGround, (v) => vc.set({ showGround: v }))}
         </fieldset>
         <fieldset>
           <legend>Graph lines shown</legend>
@@ -80,11 +87,11 @@ export function AllSettingsDialog() {
   );
 }
 
-/** Ctrl+S opens All Settings (as in SHARK) instead of the browser's save page. */
+/** Ctrl+, opens All Settings (Ctrl+S is Save). */
 export function useSettingsShortcut(): void {
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 's') {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key === ',') {
         e.preventDefault();
         useDataUi.getState().setDialog('allSettings');
       }
@@ -111,7 +118,7 @@ const HELP: { title: string; text: string }[] = [
   },
   {
     title: 'Graphs',
-    text: 'Each graph can be closed with its cross, and + Add graph opens another. Choose the sweep and the variable in the header. Right-click a graph for user lines, scope lines and appearance. Graphs / Autoscale Y only keeps the X zoom; the Y increment box scales every Y axis to whole steps. Marker and text sizes, decimal places and the scope position symbol are in Edit / All Settings.',
+    text: 'Each graph can be closed with its cross, and + Add graph opens another. Choose the sweep and the variable in the header. Right-click a graph for user lines, scope lines and appearance. Graphs / Autoscale Y only keeps the X zoom; the Y increment box scales every Y axis to whole steps. Marker and text sizes, decimal places and the scope position symbol are in Edit / All Settings (Ctrl+,).',
   },
   {
     title: 'Scope and user lines',
@@ -127,7 +134,7 @@ const HELP: { title: string; text: string }[] = [
   },
   {
     title: 'Keyboard',
-    text: 'Ctrl+S opens All Settings. Escape closes a window. In a number box, Enter accepts the value and Escape puts the old one back. Double-click a graph to autoscale it.',
+    text: 'Ctrl+S saves the file and Ctrl+, opens All Settings. Escape closes a window. In a number box, Enter accepts the value and Escape puts the old one back. Double-click a graph to autoscale it.',
   },
 ];
 

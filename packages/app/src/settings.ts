@@ -22,10 +22,9 @@ export interface Settings {
   /** Marker drawn at the current (static) position on each data line. */
   scopeSymbol: Marker;
   style: Record<LineKind, LineStyle>;
-  showBody: boolean;
 }
 
-export const defaultSettings = (): Settings => ({ markerSize: 3, textSize: 10, decimals: 3, scopeSymbol: 'none', style: defaultStyle(), showBody: true });
+export const defaultSettings = (): Settings => ({ markerSize: 3, textSize: 10, decimals: 3, scopeSymbol: 'none', style: defaultStyle() });
 
 const clamp = (v: unknown, lo: number, hi: number, d: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : d);
 
@@ -44,7 +43,6 @@ export function sanitiseSettings(v: unknown): Settings {
     decimals: Math.round(clamp(o.decimals, 0, 8, d.decimals)),
     scopeSymbol: typeof o.scopeSymbol === 'string' ? o.scopeSymbol : d.scopeSymbol,
     style,
-    showBody: typeof o.showBody === 'boolean' ? o.showBody : d.showBody,
   };
 }
 

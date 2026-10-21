@@ -5,11 +5,17 @@ import {
 } from '@claudus/core';
 import { useUnits } from '../units';
 import { Dlg } from './ComplianceDialogs';
+import { STD_VIEWS, cameraApi, useViewCtl, type FillStyle } from '../viewCtl';
+import { DisplayDialog, SavedViewsDialog, copyViewImage, saveViewImage } from './ViewControls';
 
 /** SHARK's View menu: Change Units. */
 export function ViewMenu() {
   const [open, setOpen] = useState(false);
   const [units, setUnits] = useState(false);
+  const [display, setDisplay] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [note, setNote] = useState('');
+  const vc = useViewCtl();
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -24,10 +30,36 @@ export function ViewMenu() {
       <button onClick={() => setOpen(!open)}>View ▾</button>
       {open && (
         <div className="menulist" role="menu">
+          <button onClick={() => { setOpen(false); cameraApi()?.fit(); }}>Autoscale / fit (Ctrl+A)</button>
+          <button onClick={() => { setOpen(false); vc.setTool('box'); }}>Zoom box</button>
+          <button onClick={() => { setOpen(false); vc.setTool('centre'); }}>Pick view centre</button>
+          <button onClick={() => vc.set({ dyn: vc.dyn === 'rotate' ? 'pan' : vc.dyn === 'pan' ? 'zoom' : 'rotate' })}>Dynamic mode: {vc.dyn} (Alt+Z)</button>
+          <div className="menuhead">Standard views</div>
+          {STD_VIEWS.map(([id, label]) => (
+            <button key={id} role="menuitemradio" aria-checked={vc.stdView === id} onClick={() => { setOpen(false); cameraApi()?.stdView(id); }}>
+              <span className="tick">{vc.stdView === id ? '●' : ''}</span>{label}
+            </button>
+          ))}
+          <button onClick={() => { setOpen(false); setSaved(true); }}>Saved views…</button>
+          <hr />
+          <div className="menuhead">Fill style</div>
+          {(['solid', 'wireframe', 'hidden'] as FillStyle[]).map((f) => (
+            <button key={f} role="menuitemradio" aria-checked={vc.fill === f} onClick={() => vc.set({ fill: f })}>
+              <span className="tick">{vc.fill === f ? '●' : ''}</span>{f === 'hidden' ? 'Hidden line' : f[0].toUpperCase() + f.slice(1)}
+            </button>
+          ))}
+          <button onClick={() => { setOpen(false); setDisplay(true); }}>Display options (colours, labels, visibility)…</button>
+          <hr />
+          <button onClick={async () => { setNote(await copyViewImage()); }}>Copy view to clipboard</button>
+          <button onClick={() => { setOpen(false); void saveViewImage(); }}>Save view as PNG…</button>
+          {note && <div className="muted small pad">{note}</div>}
+          <hr />
           <button onClick={() => { setOpen(false); setUnits(true); }}>Units…</button>
         </div>
       )}
       {units && <UnitsDialog onClose={() => setUnits(false)} />}
+      {display && <DisplayDialog onClose={() => setDisplay(false)} />}
+      {saved && <SavedViewsDialog onClose={() => setSaved(false)} />}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 /** Which data dialog is open, and the state of the Add Point flow (which can stop to pick points in the 3D view). */
 import { create } from 'zustand';
 import {
-  addPointToTemplate, addSpringDamper, getTemplate, GROUND, hasTemplate, isCustomTemplate, nextFreeSlot, pointPositions,
+  addPointToTemplate, addSpringDamper, getTemplate, GROUND, hasTemplate, isCustomTemplate, nextFreeSlot, modelPointMap,
   type ElementKind, type ElementOption, type Model, type Template, type Vec3,
 } from '@claudus/core';
 import { useApp } from './store';
@@ -73,7 +73,7 @@ function useChanged(t: Template, changed: Template, points?: Vec3[]): void {
 /** Where the new point or C of G goes, from the placement the user chose. */
 export function placement(a: AddPointState, t: Template, points: Vec3[]): Vec3 {
   if (a.mode === 'abs') return a.abs;
-  const at = pointPositions(t, points);
+  const at = modelPointMap(t, points);
   const p = (no: number | undefined) => {
     const v = no === undefined ? undefined : at.get(no);
     if (!v) throw new Error('Pick the point(s) first.');

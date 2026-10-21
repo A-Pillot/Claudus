@@ -1,20 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { analyse, complianceAt, Corner, defaultCompliance, makeCompliant, solveAxle, type AxleState, type ComplianceData, type ComplianceResult, type EndAnalysis, type Model } from '@claudus/core';
-import { useApp } from './store';
+import { analyse, complianceAt, Corner, defaultCompliance, makeCompliant, solveAxle, solverOptionsFor, toleranceAnalysis, type ToleranceAnalysis, type AxleState, type ComplianceData, type ComplianceResult, type EndAnalysis, type Model } from '@claudus/core';
+import { isEditing, useApp } from './store';
+import { useModes } from './modes';
 
 /**
  * The compliance data the solver uses: the model's own (or the defaults), with every external force switched
  * off when the master switch says so.
  */
-export function effectiveCompliance(c: ComplianceData | undefined, forcesOn: boolean): ComplianceData {
-  const d = c ?? defaultCompliance();
+export function effectiveCompliance(c: ComplianceData | undefined, forcesOn: boolean, switches?: ComplianceData['switches']): ComplianceData {
+  const d = { ...(c ?? defaultCompliance()), switches };
   return forcesOn ? d : { ...d, forceSets: d.forceSets.map((f) => ({ ...f, on: false })) };
 }
 
 export function useEffectiveCompliance(): ComplianceData {
   const c = useApp((s) => s.model.compliance);
   const forcesOn = useApp((s) => s.forcesOn);
-  return useMemo(() => effectiveCompliance(c, forcesOn), [c, forcesOn]);
+  const rollBar = useModes((s) => s.rollBar);
+  const bushPreload = useModes((s) => s.bushPreload);
+  return useMemo(() => effectiveCompliance(c, forcesOn, { rollBar, bushPreload }), [c, forcesOn, rollBar, bushPreload]);
 }
 
 /** The kinematic model of the end being shown, rebuilt when its data changes. */
@@ -25,16 +28,20 @@ export function useCorner(): { corner?: Corner; error?: string } {
   const templatesRev = useApp((s) => s.templatesRev);
   const compliant = useApp((s) => s.compliant);
   const comp = useEffectiveCompliance();
+  const tolerances = useApp((s) => s.model.tolerances);
+  const rollSolution = useApp((s) => s.model.rollSolution);
+  const steering = useApp((s) => s.model.steering);
+  const motion = useModes((s) => s.motion);
   return useMemo(() => {
     if (!data) return { error: `This model has no ${end} suspension.` };
     try {
-      const corner = new Corner(data, end);
+      const corner = new Corner(data, end, undefined, solverOptionsFor({ tolerances, rollSolution, steering }, { motion }, end));
       // In compliant mode every solve of this corner is deflected under the spring and external loads.
       return { corner: compliant ? makeCompliant(corner, comp) : corner };
     } catch (e) {
       return { error: (e as Error).message };
     }
-  }, [data, end, templatesRev, compliant, comp]);
+  }, [data, end, templatesRev, compliant, comp, tolerances, rollSolution, steering, motion]);
 }
 
 /** The compliant solution (joint deflections and forces, spring and tyre loads) at the current position of the right-hand corner. */
@@ -89,17 +96,48 @@ export function useAnalysis(): AnalysisState {
   const templatesRev = useApp((s) => s.templatesRev);
   const compliant = useApp((s) => s.compliant);
   const comp = useEffectiveCompliance();
+  const motion = useModes((s) => s.motion);
   const [state, setState] = useState<AnalysisState>({ busy: true });
+  const lastRun = useRef(0);
   useEffect(() => {
     setState((s) => ({ ...s, busy: true }));
+    // While a point is being dragged the graphs refresh about three times a second instead of waiting for a pause.
+    const live = isEditing() && Date.now() - lastRun.current > 300;
     const t = setTimeout(() => {
+      lastRun.current = Date.now();
       try {
-        setState({ results: analyse(compliant ? { ...model, compliance: comp } : model, { compliant }), model, busy: false });
+        setState({ results: analyse(compliant ? { ...model, compliance: comp } : model, { compliant, solver: { motion } }), model, busy: false });
       } catch (e) {
         setState({ busy: false, error: (e as Error).message });
       }
-    }, 250);
+    }, live ? 0 : 250);
     return () => clearTimeout(t);
-  }, [model, templatesRev, compliant, comp]);
+  }, [model, templatesRev, compliant, comp, motion]);
+  return state;
+}
+
+/** The 27-position spread for the chosen tolerance point, recomputed shortly after edits stop. Absent when off. */
+export function useTolerance(): { result?: ToleranceAnalysis; busy: boolean; error?: string } {
+  const model = useApp((s) => s.model);
+  const templatesRev = useApp((s) => s.templatesRev);
+  const on = useModes((s) => s.tolOn);
+  const point = useModes((s) => s.tolPoint);
+  const motion = useModes((s) => s.motion);
+  const [state, setState] = useState<{ result?: ToleranceAnalysis; busy: boolean; error?: string }>({ busy: false });
+  useEffect(() => {
+    if (!on || !point || !model[point.end]) {
+      setState({ busy: false });
+      return;
+    }
+    setState((s) => ({ ...s, busy: true }));
+    const t = setTimeout(() => {
+      try {
+        setState({ result: toleranceAnalysis(model, point.end, point.index, { solver: { motion } }), busy: false });
+      } catch (e) {
+        setState({ busy: false, error: (e as Error).message });
+      }
+    }, 500);
+    return () => clearTimeout(t);
+  }, [model, templatesRev, on, point, motion]);
   return state;
 }

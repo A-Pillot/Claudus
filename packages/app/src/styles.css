@@ -367,3 +367,21 @@ table.grid tr.st-undefined td, table.grid tr.st-derived td { opacity: 0.75; }
 .graphhead .icon { margin-left: 0; flex: none; }
 .graphhead select:first-child { flex: 0 0 auto; }
 .menulist .menurow .numcell, .barfield .numcell { border-color: var(--line); }
+/* 3D view tools, box zoom, coincidence list */
+.viewtools { position: absolute; right: 12px; top: 10px; display: flex; gap: 6px; align-items: center; z-index: 5; }
+.viewtools button.on, .viewtools .seg button.on { background: var(--line); }
+.viewtool-layer { position: absolute; inset: 0; z-index: 6; cursor: crosshair; }
+.viewtool-hint { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); background: rgba(20, 23, 28, 0.85); border: 1px solid var(--line); border-radius: 5px; padding: 3px 8px; pointer-events: none; }
+.zoombox { position: absolute; border: 1px dashed #ffe066; background: rgba(255, 224, 102, 0.12); pointer-events: none; }
+.coincident { position: absolute; left: 12px; bottom: 12px; z-index: 7; display: flex; flex-direction: column; gap: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px; }
+.coincident button.on { background: #2c2a17; }
+.checkgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 16px; margin: 4px 0 8px; }
+.plabel.part { color: #ffd479; font-style: italic; }
+.menulist { max-height: 85vh; overflow-y: auto; }
+/* result listings (spline fits and data, bush and point listings) */
+.listing { width: 100%; min-height: 40vh; height: 52vh; resize: vertical; background: #10151b; color: var(--text); border: 1px solid var(--line); border-radius: 5px; padding: 8px; font: 12px/1.35 ui-monospace, 'SF Mono', Menlo, Consolas, monospace; white-space: pre; overflow: auto; }
+.dialog .row.wrap { flex-wrap: wrap; }
+.dialog .check { display: inline-flex; align-items: center; gap: 4px; color: var(--text); }
+.dialog .varpick { display: flex; flex-wrap: wrap; gap: 4px 14px; max-height: 20vh; overflow: auto; padding: 6px; border: 1px solid var(--line); border-radius: 5px; }
+.dialog .numin { width: 80px; }
+.rotchart { width: 100%; max-height: 220px; color: var(--muted); background: #10151b; border: 1px solid var(--line); border-radius: 5px; }
