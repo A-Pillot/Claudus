@@ -54,7 +54,8 @@ function finishAdd(): void {
   const a = useApp.getState().addMode;
   if (!a) return;
   useApp.getState().setAddMode(null);
-  addGraphic(buildElement(a.option, a.picked, a.params));
+  if (a.onDone) a.onDone(a.picked);
+  else addGraphic(buildElement(a.option, a.picked, a.params));
 }
 
 /** A point was clicked while adding: record it, and add the element once the last pick is in. */

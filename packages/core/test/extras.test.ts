@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { readDat, writeDat } from '../src/io/dat.js';
-import { BODY_USER, bodyLines, parseStl } from '../src/model/extras.js';
+import { BODY_USER, bodyLines, formatPolys, parsePolys, parseStl } from '../src/model/extras.js';
 import { newModel } from '../src/model/new.js';
 import { addPointToTemplate, addSpringDamper, hasElement } from '../src/template/edit.js';
 import { getTemplate } from '../src/template/registry.js';
 import { dataPoints, GROUND } from '../src/template/types.js';
 import { Corner } from '../src/solver/corner.js';
 import { defaultOptimiserSettings } from '../src/optimise/optimiser.js';
+import { autoscaleBars, barSum, coefficientBars, limitsToCurrent, unityBars } from '../src/compliance/analysis.js';
+import { defaultCompliance } from '../src/compliance/types.js';
 
 describe('Claudus-only model data', () => {
   it('writes body and optimiser data in their own sections and reads them back', () => {
@@ -26,6 +28,13 @@ describe('Claudus-only model data', () => {
     expect(bodyLines({ type: 1, lines: [], facets: [] }).length).toBeGreaterThan(3);
     expect(bodyLines({ type: 0, lines: [], facets: [] })).toEqual([]);
     expect(bodyLines({ type: BODY_USER, lines: [], facets: [[[0, 0, 0], [1, 0, 0], [0, 1, 0]]] })[0]).toHaveLength(4);
+  });
+
+  it('edits polylines as text', () => {
+    const l = [[[0, 0, 0], [1.5, 2, 3]], [[1, 1, 1], [2, 2, 2], [3, 3, 3]]] as [number, number, number][][];
+    expect(parsePolys(formatPolys(l))).toEqual(l);
+    expect(() => parsePolys('1 2')).toThrow(/Line 1/);
+    expect(() => parsePolys('1 2 3', 3)).toThrow(/at least 3/);
   });
 
   it('reads ASCII STL', () => {
@@ -53,5 +62,28 @@ describe('template edits', () => {
     expect(hasElement(t, 'spring2')).toBe(false);
     const r = addSpringDamper(t, 'spring2', nos[0], nos[1]);
     expect(hasElement(r, 'spring2')).toBe(true);
+  });
+});
+
+describe('compliance coefficient bars', () => {
+  it('saves bar limits, scales and weights in the Claudus section', () => {
+    const m = newModel(1);
+    m.compliance = defaultCompliance();
+    m.compliance.bars = [[{ key: 'toe', limit: 0.1, weight: 2 }, { key: 'camber', scale: 0.5, weight: 1 }], undefined as never, []];
+    const back = readDat(writeDat(m));
+    expect(back.compliance?.bars?.[0]).toEqual(m.compliance.bars[0]);
+    expect(back.compliance?.bars?.[2]).toEqual([]);
+    expect(back.compliance?.bars?.[1]).toBeUndefined();
+  });
+
+  it('defaults to every variable and does the bulk edits', () => {
+    const bars = coefficientBars(defaultCompliance(), 0);
+    expect(bars).toHaveLength(9);
+    const v = { toe: 0.2, camber: -0.4, castor: 0, kingpin: 0, wcX: 0, wcY: 0, wcZ: 0, tcpX: 0, tcpY: 0 };
+    expect(limitsToCurrent(bars, v)[1].limit).toBe(-0.4);
+    expect(autoscaleBars(bars, v, 1)[1].scale).toBeCloseTo(0.4);
+    expect(autoscaleBars(bars, v)[2].scale).toBe(1);
+    expect(unityBars(bars).every((b) => b.scale === 1)).toBe(true);
+    expect(barSum(v, [{ key: 'toe', weight: 2 }, { key: 'camber', weight: 1 }])).toBeCloseTo(0.8);
   });
 });

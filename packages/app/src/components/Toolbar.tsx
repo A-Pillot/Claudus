@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { DatParseError, formatSdf, isTwoDText, listTemplates, newModel, readDat, readTwoD, TwoDParseError, writeDat, writeTwoD, type End, type TwoDType } from '@claudus/core';
+import { formatSdf, listTemplates, newModel, newSuspension, getTemplate, writeDat, writeTwoD, type End, type TwoDType } from '@claudus/core';
 import type { AnalysisState } from '../derived';
 import { useApp } from '../store';
 import { files } from '../files';
@@ -12,6 +12,9 @@ import { ComplianceMenus } from './ComplianceMenu';
 import { GraphsMenu } from './GraphsMenu';
 import { RideHeightMenu } from './RideHeightMenu';
 import { ViewMenu } from './ViewMenu';
+import { DataDialogsHost, DataMenu, EditMenu, HelpMenu, RecentMenu } from './DataMenu';
+import { loadFileText, optimiserSnapshot } from '../openFile';
+import { editModel } from '../dataUi';
 
 export function Toolbar({ analysis }: { analysis: AnalysisState }) {
   const { model, fileName, dirty, end, setModel, setEnd, markSaved } = useApp();
@@ -23,18 +26,8 @@ export function Toolbar({ analysis }: { analysis: AnalysisState }) {
   const open = async () => {
     const f = await files().open('.dat');
     if (!f) return;
-    try {
-      // A 2D file switches to the 2D module, a 3D file back to the 3D module.
-      if (isTwoDText(f.text)) {
-        two2.load(readTwoD(f.text), f.name);
-      } else {
-        setModel(readDat(f.text), f.name);
-        two2.deactivate();
-      }
-      setError(null);
-    } catch (e) {
-      setError(e instanceof DatParseError || e instanceof TwoDParseError ? e.message : `Could not read ${f.name}: ${(e as Error).message}`);
-    }
+    // A 2D file switches to the 2D module, a 3D file back to the 3D module.
+    setError(loadFileText(f));
   };
   const save = async () => {
     if (two) {
@@ -43,7 +36,9 @@ export function Toolbar({ analysis }: { analysis: AnalysisState }) {
       return;
     }
     // Custom templates the model uses travel inside the file, so it opens on any machine.
-    const name = await files().save(fileName, writeDat({ ...model, templates: templatesForModel(model) }));
+    // Optimiser settings, when the file includes them, are saved as they are now.
+    const out = model.optimiser ? { ...model, optimiser: optimiserSnapshot() } : model;
+    const name = await files().save(fileName, writeDat({ ...out, templates: templatesForModel(out) }));
     if (name) markSaved(name);
   };
   const exportSdf = async () => {
@@ -56,15 +51,19 @@ export function Toolbar({ analysis }: { analysis: AnalysisState }) {
       <span className="brand">Claudus</span>
       <button onClick={() => setShowNew(true)}>New</button>
       <button onClick={open}>Open…</button>
+      <RecentMenu onError={setError} />
       <button onClick={save}>Save</button>
       {!two && <button onClick={exportSdf} disabled={!analysis.results || analysis.busy}>Export SDF</button>}
       {!two && <ViewMenu />}
       {!two && <TemplateMenu onError={setError} />}
+      {!two && <DataMenu />}
+      {!two && <EditMenu onError={setError} />}
       {!two && <GraphicsMenu />}
       {!two && <GraphsMenu results={analysis.results} busy={analysis.busy} />}
       {!two && <TransferMenu onError={setError} />}
       {!two && <ComplianceMenus />}
       {!two && <RideHeightMenu onError={setError} />}
+      <HelpMenu />
       <span className="sep" />
       {/* SHARK keeps separate 2D and 3D data; this switches between the two. */}
       <div className="seg" title="Module">
@@ -82,13 +81,23 @@ export function Toolbar({ analysis }: { analysis: AnalysisState }) {
       )}
       <span className="file">{two ? two2.fileName : fileName}{(two ? two2.dirty : dirty) ? ' •' : ''}</span>
       {error && <span className="error" onClick={() => setError(null)}>{error}</span>}
-      {showNew && <NewDialog onClose={() => setShowNew(false)} onCreate={(slot, e) => { setModel(newModel(slot, e), `type${slot}.dat`); two2.deactivate(); setShowNew(false); }} onCreate2D={(t) => { two2.create(t); setShowNew(false); }} />}
+      {!two && <DataDialogsHost />}
+      {showNew && <NewDialog onClose={() => setShowNew(false)} onCreate={(slot, e, addToCurrent) => {
+        if (addToCurrent) editModel((m) => { m[e] = newSuspension(slot); if (getTemplate(slot).rigidAxle) m.params[e === 'front' ? 'frontSuspensionType' : 'rearSuspensionType'] = 2; });
+        else setModel(newModel(slot, e), `type${slot}.dat`);
+        two2.deactivate();
+        setShowNew(false);
+      }} onCreate2D={(t) => { two2.create(t); setShowNew(false); }} />}
     </header>
   );
 }
 
-function NewDialog({ onClose, onCreate, onCreate2D }: { onClose: () => void; onCreate: (slot: number, end: End) => void; onCreate2D: (type: TwoDType) => void }) {
+function NewDialog({ onClose, onCreate, onCreate2D }: { onClose: () => void; onCreate: (slot: number, end: End, addToCurrent: boolean) => void; onCreate2D: (type: TwoDType) => void }) {
   const templates = listTemplates();
+  // With one end in the model, a new suspension can be added as the other end instead of replacing the model.
+  const model = useApp((s) => s.model);
+  const missing: End | undefined = model.front && !model.rear ? 'rear' : model.rear && !model.front ? 'front' : undefined;
+  const [addTo, setAddTo] = useState(false);
   const [slot, setSlot] = useState(templates[0].slot);
   const [end, setEnd] = useState<End>('front');
   // 2D models are a different module; they are picked from the same list.
@@ -105,20 +114,23 @@ function NewDialog({ onClose, onCreate, onCreate2D }: { onClose: () => void; onC
             </button>
           ))}
           {templates.map((t) => (
-            <button key={t.slot} className={kind2D === null && slot === t.slot ? 'on' : ''} onClick={() => { setKind2D(null); setSlot(t.slot); }} onDoubleClick={() => onCreate(t.slot, end)}>
+            <button key={t.slot} className={kind2D === null && slot === t.slot ? 'on' : ''} onClick={() => { setKind2D(null); setSlot(t.slot); }} onDoubleClick={() => onCreate(t.slot, addTo && missing ? missing : end, addTo && !!missing)}>
               <b>{t.slot}</b> {t.label}
             </button>
           ))}
         </div>
+        {missing && kind2D === null && (
+          <label className="check"><input type="checkbox" checked={addTo} onChange={(e) => setAddTo(e.target.checked)} /> Add as the {missing} end of the current model</label>
+        )}
         <label>End</label>
         <div className="seg">
           {(['front', 'rear'] as End[]).map((e) => (
-            <button key={e} className={end === e ? 'on' : ''} onClick={() => setEnd(e)}>{e === 'front' ? 'Front' : 'Rear'}</button>
+            <button key={e} className={(addTo && missing ? missing : end) === e ? 'on' : ''} disabled={addTo && !!missing && e !== missing} onClick={() => setEnd(e)}>{e === 'front' ? 'Front' : 'Rear'}</button>
           ))}
         </div>
         <div className="actions">
           <button onClick={onClose}>Cancel</button>
-          <button className="primary" onClick={() => (kind2D ? onCreate2D(kind2D) : onCreate(slot, end))}>Create</button>
+          <button className="primary" onClick={() => (kind2D ? onCreate2D(kind2D) : onCreate(slot, addTo && missing ? missing : end, addTo && !!missing))}>Create</button>
         </div>
       </div>
     </div>

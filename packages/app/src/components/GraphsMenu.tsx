@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { End, EndAnalysis } from '@claudus/core';
 import { SCOPE_SLOTS, useLab } from '../lab';
 import { allLines } from './Graphs';
+import { useDataUi } from '../dataUi';
 
 const NAMES: Record<End, string> = { front: 'Front', rear: 'Rear' };
 
@@ -13,6 +14,8 @@ export function GraphsMenu({ results, busy }: { results?: EndAnalysis[]; busy: b
   const scope = useLab((s) => s.scope);
   const devSlot = useLab((s) => s.scopeDevSlot);
   const userCount = useLab((s) => s.userLines.length);
+  const yInc = useLab((s) => s.yIncrement);
+  const [yIncText, setYIncText] = useState(yInc ? String(yInc) : '');
   const lab = useLab.getState;
 
   useEffect(() => {
@@ -52,7 +55,18 @@ export function GraphsMenu({ results, busy }: { results?: EndAnalysis[]; busy: b
           <div className="menurow"><span>All graphs</span>
             <button onClick={done(() => lab().sendGraphCmd('swap'))}>Switch x-y</button>
             <button onClick={done(() => lab().sendGraphCmd('autoscale'))}>Autoscale</button>
+            <button onClick={done(() => lab().sendGraphCmd('autoscaleY'))} title="Rescale the Y axis only, keeping any zoom on X">Autoscale Y only</button>
             <button onClick={done(() => lab().sendGraphCmd('styles'))} title="Set every graph's colours and markers back to the defaults">Default styles</button>
+          </div>
+          <div className="menurow"><span>Y increment</span>
+            <input className="yinc" type="number" min={0} step="any" aria-label="Y increment" value={yIncText} placeholder="off" onChange={(e) => setYIncText(e.target.value)} />
+            <button onClick={() => lab().setYIncrement(Number(yIncText))} title="Scale every Y axis to whole steps of this size">Autoscale to Y increment</button>
+            <button disabled={!yInc} onClick={() => { setYIncText(''); lab().setYIncrement(0); }}>Off</button>
+          </div>
+          <div className="menurow"><span>Graphs</span>
+            <button onClick={done(() => lab().sendGraphCmd('add'))}>New graph</button>
+            <button onClick={done(() => lab().sendGraphCmd('closeAll'))}>Close all</button>
+            <button onClick={done(() => useDataUi.getState().setDialog('allSettings'))} title="Marker and text sizes, decimal places, scope symbol">Display settings…</button>
           </div>
           <hr />
           <div className="menuhead">Scope lines</div>

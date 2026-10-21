@@ -17,6 +17,9 @@ export type SweepKind = 'bump' | 'roll' | 'rack';
 
 export const SCOPE_SLOTS = 5;
 
+/** Commands from the Graphs menu that every graph (or the graph list) acts on. */
+export type GraphCmdKind = 'swap' | 'autoscale' | 'autoscaleY' | 'styles' | 'add' | 'closeAll';
+
 export interface DisplaySettings {
   mode: DisplayMode;
   artView: ArticulationView;
@@ -80,8 +83,11 @@ export interface LabState {
   graphVis: GraphVisibility;
   setGraphVis: (v: Partial<GraphVisibility>) => void;
   /** Menu commands for every open graph; each graph acts when `n` changes. */
-  graphCmd: { n: number; kind: 'swap' | 'autoscale' | 'styles' };
-  sendGraphCmd: (kind: 'swap' | 'autoscale' | 'styles') => void;
+  graphCmd: { n: number; kind: GraphCmdKind };
+  sendGraphCmd: (kind: GraphCmdKind) => void;
+  /** Y axis step for "autoscale to Y increment" (0 = off, the axis scales freely). */
+  yIncrement: number;
+  setYIncrement: (v: number) => void;
 
   editLine: EditLineTarget | null;
   setEditLine: (e: EditLineTarget | null) => void;
@@ -135,6 +141,8 @@ export const useLab = create<LabState>((set) => ({
   setGraphVis: (v) => set((s) => ({ graphVis: { ...s.graphVis, ...v } })),
   graphCmd: { n: 0, kind: 'autoscale' },
   sendGraphCmd: (kind) => set((s) => ({ graphCmd: { n: s.graphCmd.n + 1, kind } })),
+  yIncrement: 0,
+  setYIncrement: (yIncrement) => set((s) => ({ yIncrement: yIncrement > 0 ? yIncrement : 0, graphCmd: { n: s.graphCmd.n + 1, kind: 'autoscale' } })),
 
   editLine: null,
   setEditLine: (editLine) => set({ editLine }),

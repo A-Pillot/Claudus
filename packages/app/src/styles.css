@@ -336,3 +336,32 @@ table.grid tr.st-undefined td, table.grid tr.st-derived td { opacity: 0.75; }
 .framelist .frame .icon { position: absolute; top: 0; right: 0; padding: 0 4px; font-size: 10px; }
 .dialog progress { width: 100%; }
 .toolbar button { white-space: nowrap; }
+
+/* Data dialogs, settings and help */
+.dialog .ok { color: #8fd18f; margin: 0; }
+.dialog .bad { color: #ff8a8a; margin: 0; }
+.dialog label.check { padding: 2px 0; display: flex; align-items: center; gap: 6px; color: var(--text); }
+.bodytext { width: 100%; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; background: #10151b; color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 6px; resize: vertical; box-sizing: border-box; }
+.filetext { white-space: pre; overflow: auto; min-height: 50vh; }
+.tree { max-height: 60vh; overflow: auto; font-size: 13px; }
+.tree summary { cursor: pointer; padding: 2px 0; }
+.tree .treekids { margin-left: 16px; border-left: 1px solid var(--line); padding-left: 8px; }
+.tree .treeleaf { display: flex; align-items: center; gap: 8px; }
+.tree .treeleaf .treelabel { flex: 1; color: var(--muted); }
+.tree .treeleaf .numcell, .tree .treeleaf input { width: 120px; }
+.settingsgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; }
+.settingsgrid fieldset { border: 1px solid var(--line); border-radius: 6px; display: flex; flex-direction: column; gap: 4px; }
+.settingsgrid input[type='number'] { width: 70px; }
+.helptext { max-height: 55vh; overflow: auto; }
+.helptext h4 { margin: 8px 0 2px; }
+.helptext p { margin: 0 0 4px; color: var(--text); }
+.graphadd { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 60px; border: 1px dashed var(--line); border-radius: 6px; }
+.yinc { width: 64px; }
+.barfield { display: inline-flex; align-items: center; gap: 4px; }
+.menulist .menurow { display: flex; align-items: center; gap: 4px; padding: 2px 6px; }
+.menulist .menurow > span:first-child { min-width: 84px; color: var(--muted); }
+.menulist .menurow .numcell { width: 70px; }
+
+.graphhead { align-items: center; }
+.graphhead select { min-width: 0; flex: 1 1 auto; }
+.graphhead .icon { margin-left: 0; flex: none; }

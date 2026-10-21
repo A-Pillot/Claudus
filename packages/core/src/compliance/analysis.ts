@@ -5,7 +5,7 @@ import { sub, type Vec3 } from '../math/vec3.js';
 import type { Corner } from '../solver/corner.js';
 import { wheelGeometry, type WheelGeometry } from '../results/derivatives.js';
 import { complianceAt } from './apply.js';
-import type { ComplianceData } from './types.js';
+import type { CoefficientBar, ComplianceData } from './types.js';
 
 export interface CoefficientRow {
   key: keyof CoefficientValues;
@@ -67,3 +67,25 @@ export function complianceCoefficients(c: Corner, data: ComplianceData): Coeffic
 
 /** How far each point moved from its kinematic position, mm. */
 export const deflections = (kinematic: Vec3[], compliant: Vec3[]): Vec3[] => compliant.map((p, i) => sub(p, kinematic[i]));
+
+/** The bars of one force set's chart: its own list, or every variable with default limit, scale and weight. */
+export const coefficientBars = (data: ComplianceData | undefined, set: number): CoefficientBar[] =>
+  data?.bars?.[set] ?? COEFFICIENTS.map((c) => ({ key: c.key, weight: 1 }));
+
+/** Weighted sum of the bar values (absolute values, so deflections in either direction add). */
+export const barSum = (values: CoefficientValues, bars: CoefficientBar[]): number =>
+  bars.reduce((s, b) => s + b.weight * Math.abs(values[b.key as keyof CoefficientValues] ?? 0), 0);
+
+/** Set every bar's limit to the current value of its variable. */
+export const limitsToCurrent = (bars: CoefficientBar[], values: CoefficientValues): CoefficientBar[] =>
+  bars.map((b) => ({ ...b, limit: values[b.key as keyof CoefficientValues] ?? 0 }));
+
+/** Set every bar's scale to cover its value with a margin (a bar with no deflection keeps a scale of 1). */
+export const autoscaleBars = (bars: CoefficientBar[], values: CoefficientValues, margin = 1.2): CoefficientBar[] =>
+  bars.map((b) => {
+    const v = Math.max(Math.abs(values[b.key as keyof CoefficientValues] ?? 0), Math.abs(b.limit ?? 0));
+    return { ...b, scale: v > 1e-9 ? v * margin : 1 };
+  });
+
+/** Set every bar's scale to one. */
+export const unityBars = (bars: CoefficientBar[]): CoefficientBar[] => bars.map((b) => ({ ...b, scale: 1 }));

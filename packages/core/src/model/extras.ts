@@ -100,9 +100,25 @@ export function parseStl(data: string | Uint8Array): Vec3[][] {
   return out;
 }
 
-// ---- file sections ---------------------------------------------------------------------------------
-
 const round = (v: number) => Math.round(v * 1000) / 1000;
+
+/** Polylines as text for editing: one per line, points as "x y z" separated by commas. */
+export const formatPolys = (list: Vec3[][]): string => list.map((l) => l.map((p) => p.map(round).join(' ')).join(', ')).join('\n');
+
+/** The reverse of formatPolys. Throws with the line number when a line is not a list of x y z points. */
+export function parsePolys(text: string, minPoints = 2): Vec3[][] {
+  const out: Vec3[][] = [];
+  text.split('\n').forEach((line, i) => {
+    if (line.trim() === '') return;
+    const pts = line.split(',').map((q) => q.trim().split(/\s+/).map(Number));
+    if (pts.some((p) => p.length !== 3 || p.some((v) => !Number.isFinite(v)))) throw new Error(`Line ${i + 1}: each point needs three numbers (x y z), points separated by commas.`);
+    if (pts.length < minPoints) throw new Error(`Line ${i + 1}: needs at least ${minPoints} points.`);
+    out.push(pts as Vec3[]);
+  });
+  return out;
+}
+
+// ---- file sections ---------------------------------------------------------------------------------
 
 export function claudusBodyLines(b: BodyData): string[] {
   const r = (list: Vec3[][]) => list.map((l) => l.map((p) => p.map(round) as Vec3));

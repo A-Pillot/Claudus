@@ -8,7 +8,8 @@ import { pickPoint } from '../graphicsActions';
 import { fmtUnit, useUnitSettings } from '../units';
 import { registerCanvas } from '../video';
 import { GraphicElements } from './GraphicShapes';
-import { CogScene, ComplianceScene, FreeBodyForces } from './ComplianceScene';
+import { BodyGraphics } from './BodyGraphics';
+import { CogScene,ComplianceScene, FreeBodyForces } from './ComplianceScene';
 
 const MM = 0.001; // scene units are metres
 
@@ -26,6 +27,7 @@ interface Props {
 export function Viewer3D({ corner, state, detail, ghosts, freeBody }: Props) {
   const view = useApp((s) => s.view);
   const compliant = useApp((s) => s.compliant);
+  const wheelbase = useApp((s) => s.model.params.wheelbase);
   const wc = corner.mech.staticPoints[corner.mech.wheelCentre];
   // Centre the scene on the axle so the camera orbits around the car's centreline at this end.
   const origin: Vec3 = [wc[0], 0, corner.z0];
@@ -57,6 +59,7 @@ export function Viewer3D({ corner, state, detail, ghosts, freeBody }: Props) {
         ))}
           </>
         )}
+        <BodyGraphics frontX={corner.end === 'front' ? wc[0] : wc[0] - wheelbase} groundZ={state.right.groundZ} />
         <Ground z={state.right.groundZ} x={wc[0]} />
         <RollCentre rc={state.rollCentre} />
         {view.triad && <axesHelper args={[300]} />}
