@@ -77,7 +77,7 @@ export interface AppState {
   /** Bumped when the set of templates changes, so lists of them refresh. */
   templatesRev: number;
   setModel: (m: Model, fileName: string) => void;
-  /** Swap the model for an edited copy (the optimiser's result or its revert) without resetting the view. */
+  /** Swap the model for an edited copy (the optimiser's result or its revert, Set Ride Height) without resetting the view. */
   replaceModel: (m: Model) => void;
   setEnd: (e: End) => void;
   setArt: (a: Partial<ArticulationState>) => void;

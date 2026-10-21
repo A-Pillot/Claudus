@@ -323,3 +323,4 @@ table.grid tr.st-undefined td, table.grid tr.st-derived td { opacity: 0.75; }
 .inertia { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 12px; }
 .inertia label { display: flex; flex-direction: column; gap: 2px; }
 .inertia .numcell { width: 100%; text-align: right; border-color: var(--line); }
+.dialog .muted { color: var(--muted); margin: 0 0 4px; }

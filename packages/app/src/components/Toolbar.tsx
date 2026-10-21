@@ -10,6 +10,7 @@ import { GraphicsMenu } from './GraphicsMenu';
 import { TransferMenu } from './TransferMenu';
 import { ComplianceMenus } from './ComplianceMenu';
 import { GraphsMenu } from './GraphsMenu';
+import { RideHeightMenu } from './RideHeightMenu';
 
 export function Toolbar({ analysis }: { analysis: AnalysisState }) {
   const { model, fileName, dirty, end, setModel, setEnd, markSaved } = useApp();
@@ -61,6 +62,7 @@ export function Toolbar({ analysis }: { analysis: AnalysisState }) {
       {!two && <GraphsMenu results={analysis.results} busy={analysis.busy} />}
       {!two && <TransferMenu onError={setError} />}
       {!two && <ComplianceMenus />}
+      {!two && <RideHeightMenu onError={setError} />}
       <span className="sep" />
       {/* SHARK keeps separate 2D and 3D data; this switches between the two. */}
       <div className="seg" title="Module">

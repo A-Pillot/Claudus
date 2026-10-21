@@ -8,10 +8,12 @@ SHARK `.dat` model files, solves the suspension kinematics, and lists the same s
 ## Status
 
 **Phase 1, the calculation core (`packages/core`)**
-- **Templates:** 27 built-in suspension types: 1 to 12 and 14 to 28.
+- **Templates:** 28 built-in suspension types: 1 to 12 and 14 to 29.
   - Corner models: 1, 2, 3, 4, 6, 7, 10, 11, 12, 14, 15, 16, 17, 18, 19, 20, 22, 24, 25, 27 and 28.
   - Rigid axles: 5, 8 and 21 (Panhard rod, Watts linkage) and 9 (twin upper links).
   - Two-sided double wishbones: 23 (anti-roll bar) and 26 (two-part compliant rack).
+  - Twist beam: 29. The two trailing arms meet at a shear point. Kinematically the beam is rigid in bending
+    and free to twist; in compliance it twists at the end's roll bar rate.
   - Point numbers and labels follow the SHARK help.
   - Default coordinates come from SHARK's sample files where there is one. SHARK shipped no sample for
     types 5, 8, 9, 19, 20, 21, 22, 24, 25, 27 and 28, so their defaults are designed layouts. Types 23 and
@@ -58,10 +60,12 @@ SHARK `.dat` model files, solves the suspension kinematics, and lists the same s
   existing file. A preview shows every match before anything is applied.
 - **Groups:** create, edit, delete and joggle point groups (stored in the `.dat` GROUPS section), plus saved point
   sets (Data / Coordinates) and Add End from File.
+- **Set Ride Height:** SHARK's five utilities (Bump, Bump + Pitch, Adjust Springs, Match to Springs, Match to
+  Weight Change) under the Ride height menu. Spring fitted lengths follow the geometry when the body moves.
 
 Next up:
-- Compliance, including type 29 (twist beam), which needs it to move at all.
-- Modal analysis, the forced-damped response and the optimiser.
+- Modal, forced response and optimiser screens.
+- Display units and AVI export.
 
 ## Use
 
