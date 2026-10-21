@@ -10,6 +10,8 @@ import { Readouts } from './components/Readouts';
 import { Graphs } from './components/Graphs';
 import { SdfView } from './components/SdfView';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { TwoDApp } from './twod/TwoDApp';
+import { useTwoD } from './twod/store2d';
 
 type SideTab = 'points' | 'params';
 type BottomTab = 'graphs' | 'sdf';
@@ -23,6 +25,17 @@ export function App() {
   const [side, setSide] = useState<SideTab>('points');
   const [bottom, setBottom] = useState<BottomTab>('graphs');
   const label = corner && selected !== null ? corner.template.points[selected] : undefined;
+  const twoD = useTwoD((s) => s.active);
+
+  // The 2D module has its own data and screen; the toolbar is shared.
+  if (twoD) {
+    return (
+      <div className="app">
+        <Toolbar analysis={analysis} />
+        <TwoDApp />
+      </div>
+    );
+  }
 
   return (
     <div className="app">

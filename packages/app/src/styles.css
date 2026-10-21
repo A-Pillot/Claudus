@@ -150,3 +150,45 @@ table.grid select { max-width: 220px; }
 .check .bad { color: #ff8a8a; }
 .check .warn { color: #e8c76a; }
 .actions .muted { margin-right: auto; }
+
+/* 2D module */
+.twod-view { position: absolute; inset: 0; background: #12161b; }
+.twod-view svg { width: 100%; height: 100%; display: block; touch-action: none; cursor: default; }
+.twod-tools { position: absolute; right: 10px; top: 10px; display: flex; gap: 6px; }
+.twod-help { position: absolute; left: 12px; bottom: 8px; font-size: 11px; pointer-events: none; }
+.g-ground { stroke: #55606e; stroke-width: 2; }
+.g-centre { stroke: #3a4452; stroke-width: 1; stroke-dasharray: 8 6; }
+.ghost { opacity: 0.35; }
+.ghost .g-pt { fill: #8b96a5; }
+.g-arm { stroke: #4e9fe5; stroke-width: 3; stroke-linecap: round; }
+.g-arm.strut { stroke: #8fb8e8; stroke-width: 5; opacity: 0.8; }
+.g-upright { stroke: #c9d3df; stroke-width: 3; stroke-linecap: round; }
+.g-tyre { fill: rgba(120, 130, 145, 0.18); stroke: #6c7787; stroke-width: 1.5; }
+.g-pt { fill: #dfe6ee; }
+.g-pt.small { fill: #8b96a5; }
+.g-con { stroke: #3fb5a8; stroke-width: 1; stroke-dasharray: 6 4; fill: none; }
+.g-con.rc { stroke: #f28e2b; stroke-dasharray: 2 4; }
+.g-ic { stroke: #3fb5a8; stroke-width: 2; fill: none; }
+.g-rc { stroke: #f28e2b; stroke-width: 2; fill: rgba(242, 142, 43, 0.4); }
+.g-rc-static { stroke: #8b96a5; stroke-width: 1.5; fill: none; }
+.g-handle { fill: rgba(78, 159, 229, 0.12); stroke: rgba(78, 159, 229, 0.7); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.g-handle:hover { fill: rgba(78, 159, 229, 0.35); }
+.g-handle.sel { stroke: var(--sel); fill: rgba(255, 224, 102, 0.2); }
+.g-handle.free { stroke: #f28e2b; stroke-dasharray: 3 3; fill: none; }
+.g-label { fill: #8b96a5; pointer-events: none; user-select: none; }
+.twod-graphs { display: flex; flex-direction: column; height: 100%; }
+.twod-graphbar { display: flex; align-items: center; gap: 8px; padding: 6px 8px 0; }
+.twod-graphbar .small { margin-right: auto; }
+.twod-graphs .graphs { flex: 1; min-height: 0; }
+.artctl.dim { opacity: 0.6; }
+.fixbox { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.fixbox .freeinfo { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.params th.grp { text-align: left; color: var(--muted); font-weight: 500; padding: 8px 10px 2px; }
+.points .ro { display: block; text-align: right; padding: 2px 4px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ulgrid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.ulgrid label { display: flex; flex-direction: column; gap: 4px; }
+.ulgrid textarea { background: #10151b; border: 1px solid var(--line); border-radius: 5px; color: var(--text); font: 12px ui-monospace, Menlo, Consolas, monospace; padding: 6px; resize: vertical; }
+/* keep the 2D graph legends on one line: names only, no x entry */
+.twod-graphs .u-legend { text-align: left; }
+.twod-graphs .u-legend .u-series { display: inline-block; padding: 2px 8px 2px 0; }
+.twod-graphs .u-legend .u-series:first-child { display: none; }

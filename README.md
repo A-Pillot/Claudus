@@ -41,8 +41,19 @@ SHARK `.dat` model files, solves the suspension kinematics, and lists the same s
 - **Files:** New (from any template), Open and Save for `.dat` files.
 - **Desktop:** a Tauri desktop app with native file dialogs.
 
+**2D module (`packages/core/src/twod`, `packages/app/src/twod`)**
+- **Files:** SHARK 2D `.dat` files (double wishbone and Macpherson strut) are read and written exactly. Opening one
+  switches to the 2D module, and New offers both 2D types.
+- **Solver:** cross-car (Y-Z) solution of both types in bump, rebound and roll, giving camber, roll centre height
+  and lateral position, half track change and the instant centres.
+- **Targets:** user lines (camber, roll centre height and lateral against bump and roll) start from the slopes in the
+  general data and can be edited or copied from the data line.
+- **Free modes:** release one hard point (Solve / 2D Fix Option) and fit its position to the user lines.
+- **Convert 2D to 3D:** fills a double wishbone or strut template from the 2D data.
+- **View:** an SVG cross-car view with draggable points, construction lines and graphs with the targets overlaid.
+
 Next up:
-- The template editor (with the Edit menu template tools) and the 2D module.
+- The template editor (with the Edit menu template tools).
 - Compliance, including type 29 (twist beam), which needs it to move at all.
 - Modal analysis, the forced-damped response and the optimiser.
 
