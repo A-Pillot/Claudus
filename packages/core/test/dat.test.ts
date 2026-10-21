@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { readDat, writeDat } from '../src/io/dat.js';
 import { SAMPLES, sample } from './helpers.js';
 
-const files = readdirSync(SAMPLES).filter((f) => f.endsWith('.dat'));
+// The 2D samples have their own reader and tests (twod.test.ts).
+const files = readdirSync(SAMPLES).filter((f) => f.endsWith('.dat') && !f.endsWith('_2d.dat'));
 
 describe('SHARK .dat files', () => {
   it.each(files)('%s round-trips through write and read', (f) => {
