@@ -7,8 +7,8 @@ import { defaultBush, defaultCompliance, defaultEndCompliance, type ExternalForc
 
 const lateral = (): ExternalForce => ({ label: 'Lat', on: true, end: 'front', part: 0, at: 0, head: [0, 0, 0], tail: [0, 500, 0], magnitude: 2000 });
 
-function setup(bushes: number[] = []) {
-  const c = new Corner(newSuspension(1), 'front');
+function setup(bushes: number[] = [], slot = 1) {
+  const c = new Corner(newSuspension(slot), 'front');
   const comp = defaultCompliance();
   comp.front = { ...defaultEndCompliance(), bushes: bushes.map((n) => defaultBush(n)) };
   comp.forceSets[0] = { label: 'Lateral', on: true, forces: [lateral()] };
@@ -30,6 +30,19 @@ describe('free body', () => {
       checked++;
     }
     expect(checked).toBeGreaterThan(3);
+  });
+
+  it.each([[1, true], [1, false], [3, true], [4, true], [7, true], [7, false], [14, false], [15, false]])('template %i balances with the spring preload %s', (slot, spring) => {
+    const { c, comp, st } = setup([], slot);
+    comp.settings.includeSpring = spring;
+    const detail = complianceAt(c, st, comp);
+    for (const { part, name } of freeBodyParts(c)) {
+      const fb = freeBody(c, st.points, comp, detail, part);
+      if (!fb.forces.length) continue;
+      const sum = fb.forces.reduce<[number, number, number]>((s, f) => [s[0] + f.force[0], s[1] + f.force[1], s[2] + f.force[2]], [0, 0, 0]);
+      const biggest = Math.max(...fb.forces.map((f) => Math.hypot(...f.force)));
+      expect(Math.hypot(...sum) / biggest, name).toBeLessThan(1e-5);
+    }
   });
 
   it('the tyre force and the external force appear on the wheel part', () => {
