@@ -1,3 +1,4 @@
+import { fmtUnit, unitText, useUnitSettings } from '../units';
 import { elementShape, isMeasure, optionOf, type AxleState, type Corner, type WheelGeometry } from '@claudus/core';
 
 const rows: { label: string; key: keyof WheelGeometry; unit: string; d: number }[] = [
@@ -11,9 +12,10 @@ const rows: { label: string; key: keyof WheelGeometry; unit: string; d: number }
   { label: 'KP offset at wheel', key: 'kingpinOffsetWheel', unit: 'mm', d: 2 },
 ];
 
-const fmt = (v: number, d: number) => (Number.isFinite(v) ? v.toFixed(d) : '–');
+const fmt = (v: number, d: number, unit: string) => fmtUnit(unit, v, d);
 
 export function Readouts({ corner, state }: { corner: Corner; state: AxleState }) {
+  useUnitSettings();
   const L = state.geometryLeft;
   const R = state.geometryRight;
   const rc = state.rollCentre;
@@ -38,26 +40,26 @@ export function Readouts({ corner, state }: { corner: Corner; state: AxleState }
           {rows.map((r) => (
             <tr key={r.key}>
               <td>{r.label}</td>
-              <td className="num">{fmt(L[r.key] as number, r.d)}</td>
-              <td className="num">{fmt(R[r.key] as number, r.d)}</td>
-              <td className="unit">{r.unit}</td>
+              <td className="num">{fmt(L[r.key] as number, r.d, r.unit)}</td>
+              <td className="num">{fmt(R[r.key] as number, r.d, r.unit)}</td>
+              <td className="unit">{unitText(r.unit)}</td>
             </tr>
           ))}
           <tr>
             <td>Contact point Y</td>
-            <td className="num">{fmt(-L.tcp[1], 1)}</td>
-            <td className="num">{fmt(R.tcp[1], 1)}</td>
-            <td className="unit">mm</td>
+            <td className="num">{fmt(-L.tcp[1], 1, 'mm')}</td>
+            <td className="num">{fmt(R.tcp[1], 1, 'mm')}</td>
+            <td className="unit">{unitText('mm')}</td>
           </tr>
         </tbody>
       </table>
       <table>
         <tbody>
-          <tr><td>Roll centre height (to ground)</td><td className="num">{fmt(rc[2] - state.right.groundZ, 2)}</td><td className="unit">mm</td></tr>
-          <tr><td>Roll centre lateral (Y)</td><td className="num">{fmt(rc[1], 2)}</td><td className="unit">mm</td></tr>
-          <tr><td>Damper length (right)</td><td className="num">{fmt(damper, 2)}</td><td className="unit">mm</td></tr>
-          <tr><td>Spring length (right)</td><td className="num">{fmt(spring, 2)}</td><td className="unit">mm</td></tr>
-          <tr><td>Track</td><td className="num">{fmt(R.tcp[1] + L.tcp[1], 1)}</td><td className="unit">mm</td></tr>
+          <tr><td>Roll centre height (to ground)</td><td className="num">{fmt(rc[2] - state.right.groundZ, 2, 'mm')}</td><td className="unit">{unitText('mm')}</td></tr>
+          <tr><td>Roll centre lateral (Y)</td><td className="num">{fmt(rc[1], 2, 'mm')}</td><td className="unit">{unitText('mm')}</td></tr>
+          <tr><td>Damper length (right)</td><td className="num">{fmt(damper, 2, 'mm')}</td><td className="unit">{unitText('mm')}</td></tr>
+          <tr><td>Spring length (right)</td><td className="num">{fmt(spring, 2, 'mm')}</td><td className="unit">{unitText('mm')}</td></tr>
+          <tr><td>Track</td><td className="num">{fmt(R.tcp[1] + L.tcp[1], 1, 'mm')}</td><td className="unit">{unitText('mm')}</td></tr>
         </tbody>
       </table>
       {measures.length > 0 && (
@@ -68,10 +70,10 @@ export function Readouts({ corner, state }: { corner: Corner; state: AxleState }
               <tr key={i}>
                 <td>{optionOf(g)?.name ?? g.kind} {g.points.join('-')}</td>
                 <td className="num">
-                  {fmt(s.value, s.kind === 'angle' ? 3 : 2)}
-                  {s.comps && <div className="comps">{s.comps.map((v) => fmt(v, 2)).join(' / ')}</div>}
+                  {fmt(s.value, s.kind === 'angle' ? 3 : 2, s.kind === 'angle' ? 'deg' : 'mm')}
+                  {s.comps && <div className="comps">{s.comps.map((v) => fmt(v, 2, 'mm')).join(' / ')}</div>}
                 </td>
-                <td className="unit">{s.kind === 'angle' ? '°' : 'mm'}</td>
+                <td className="unit">{unitText(s.kind === 'angle' ? '°' : 'mm')}</td>
               </tr>
             ))}
           </tbody>

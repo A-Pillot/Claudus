@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
-import { deviation, leftRows, lineFromData, lineKey, measureColumns, type End, type EndAnalysis, type Side, type Sweep, type UserLine } from '@claudus/core';
+import { deviation, leftRows, lineFromData, lineKey, measureColumns, unitFactor, unitText, type End, type EndAnalysis, type Side, type Sweep, type UserLine } from '@claudus/core';
 import { useApp } from '../store';
 import { useLab } from '../lab';
 import { defaultOptions, defaultStyle, drawMarker, GraphStyleDialog, type GraphOptions, type Marker } from './GraphOptions';
+import { useUnitSettings } from '../units';
 
 type Mode = 'bump' | 'roll' | 'steer';
 
@@ -118,7 +119,7 @@ export function allLines(results: EndAnalysis[] | undefined, end: End, side: Sid
 
 const SCOPE_ALPHA = ['ff', 'cc', 'a6', '80', '66'];
 const END_NAME = { front: 'Front', rear: 'Rear' } as const;
-const fixed = (v: number | undefined) => (v === undefined ? '–' : v.toFixed(3));
+const fixed = (v: number | undefined, f = 1) => (v === undefined ? '–' : (v * f).toFixed(3));
 
 /** Per-series drawing info that uPlot's own series options do not cover. */
 interface ColMeta { marker: Marker; colour: string; size: number; grad: boolean }
@@ -129,7 +130,10 @@ function GraphCard({ results, mode, varKey, onChange }: { results?: EndAnalysis[
   const def = useMemo(() => ({ x: base.x, ys: [...base.ys, ...extra] }), [base, extra]);
   const y = def.ys.find((v) => v.key === varKey) ?? def.ys[0];
   const art = useApp((s) => s.art);
-  const current = mode === 'bump' ? art.bump : mode === 'roll' ? art.roll : art.rack;
+  const units = useUnitSettings();
+  const fx = unitFactor(def.x.unit, units);
+  const fy = unitFactor(y.unit, units);
+  const current = (mode === 'bump' ? art.bump : mode === 'roll' ? art.roll : art.rack) * fx;
   const userLines = useLab((s) => s.userLines);
   const scope = useLab((s) => s.scope);
   const vis = useLab((s) => s.graphVis);
@@ -162,7 +166,7 @@ function GraphCard({ results, mode, varKey, onChange }: { results?: EndAnalysis[
     if (!ends.length) return { data: null, series: [], metas: [] };
     type Col = { s: uPlot.Series; meta: ColMeta; m: Map<number, number | null> };
     const cols: Col[] = [];
-    const rowsMap = (rows: any[]) => new Map<number, number | null>(rows.map((r) => { const v = y.get(r); return [def.x.get(r), v === undefined || !Number.isFinite(v) ? null : v]; }));
+    const rowsMap = (rows: any[]) => new Map<number, number | null>(rows.map((r) => { const v = y.get(r); return [def.x.get(r) * fx, v === undefined || !Number.isFinite(v) ? null : v * fy]; }));
     const st = opts.style;
     // Scope lines first so the data line is drawn on top of them.
     if (vis.scope)
@@ -187,7 +191,7 @@ function GraphCard({ results, mode, varKey, onChange }: { results?: EndAnalysis[
           cols.push({
             s: { label: `User${ends.length > 1 ? ' ' + END_NAME[e.end].toLowerCase() : ''}${sideName(side)}`, stroke: st.user.colour, width: 2, dash: side === 'left' ? [3, 3] : undefined, spanGaps: true, points: { show: false } },
             meta: { marker: st.user.marker, colour: st.user.colour, size: 4, grad: false },
-            m: new Map(l.points.map(([px, py]) => [px, py] as [number, number | null])),
+            m: new Map(l.points.map(([px, py]) => [px * fx, py * fy] as [number, number | null])),
           });
         }
     for (const e of ends)
@@ -206,7 +210,7 @@ function GraphCard({ results, mode, varKey, onChange }: { results?: EndAnalysis[
       metas: cols.map((c) => c.meta),
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ends, y, def, userLines, scope, vis.scope, vis.userLine, vis.left, mode, opts.style]);
+  }, [ends, y, def, userLines, scope, vis.scope, vis.userLine, vis.left, mode, opts.style, fx, fy]);
 
   const devs = useMemo(() => ends.flatMap((e) => sides.map((side) => {
     const l = lineFor(e.end, side);
@@ -223,7 +227,7 @@ function GraphCard({ results, mode, varKey, onChange }: { results?: EndAnalysis[
   const closeMenu = () => setMenu(null);
   const run = (fn: () => void) => () => { fn(); closeMenu(); };
   const title = `${y.label} against ${def.x.label.toLowerCase()}`;
-  const edit = (end: End, side: Side) => lab().setEditLine({ end, side, sweep: mode, variable: y.key, label: `${END_NAME[end]} ${side === 'left' ? '(-Y) ' : ''}${title}` });
+  const edit = (end: End, side: Side) => lab().setEditLine({ end, side, sweep: mode, variable: y.key, label: `${END_NAME[end]} ${side === 'left' ? '(-Y) ' : ''}${title}`, xUnit: def.x.unit, yUnit: y.unit });
   const copyData = () => ends.forEach((e) => sides.forEach((side) => lab().setUserLine(lineFromData(e[mode] as any[], mode, y.key, e.end, side))));
   const store = (slot: number) => results && lab().storeScope(slot, results);
   const hasUser = userLines.some((l) => ends.some((e) => (['right', 'left'] as Side[]).some((side) => lineKey(l) === lineKey(idOf(e.end, side)))));
@@ -248,7 +252,7 @@ function GraphCard({ results, mode, varKey, onChange }: { results?: EndAnalysis[
           {devs.map((d) => (
             <span key={d.end + d.side}>
               {ends.length > 1 || sides.length > 1 ? `${END_NAME[d.end]}${sideName(d.side)}: ` : ''}
-              user deviation <b>{fixed(d.user)}</b> · scope {devSlot + 1} deviation <b>{fixed(d.scope)}</b>
+              user deviation <b>{fixed(d.user, fy)}</b> · scope {devSlot + 1} deviation <b>{fixed(d.scope, fy)}</b>
             </span>
           ))}
         </div>
@@ -256,7 +260,7 @@ function GraphCard({ results, mode, varKey, onChange }: { results?: EndAnalysis[
       {data ? (
         <Plot
           data={data} series={series} metas={metas} swap={opts.swap} view={view} onView={setView} showSlope={vis.derivative}
-          xLabel={`${def.x.label} (${def.x.unit})`} yLabel={y.unit ? `${y.label} (${y.unit})` : y.label} marker={current}
+          xLabel={`${def.x.label} (${unitText(def.x.unit, units)})`} yLabel={y.unit ? `${y.label} (${unitText(y.unit, units)})` : y.label} marker={current}
         />
       ) : (
         <div className="muted pad">{results ? 'Not applicable to this model.' : 'Calculating…'}</div>

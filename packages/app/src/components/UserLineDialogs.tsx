@@ -5,6 +5,7 @@ import { files } from '../files';
 import { exportSets, importSets, loadSets, storeSets } from '../userLineSets';
 import { Dlg } from './ComplianceDialogs';
 import { NumberCell } from './PointTable';
+import { unitText, useUnitSettings } from '../units';
 
 /** The right-mouse "Edit user line" table: x and y per row, sorted ascending on x when it is closed. */
 export function EditUserLineDialog() {
@@ -15,6 +16,7 @@ export function EditUserLineDialog() {
 
 function EditBody() {
   const target = useLab((s) => s.editLine)!;
+  useUnitSettings();
   const existing = useLab((s) => s.userLines.find((l) => l.end === target.end && (l.side ?? 'right') === target.side && l.sweep === target.sweep && l.variable === target.variable));
   const [rows, setRows] = useState<[number, number][]>(() => (existing ? existing.points.map((p) => [...p] as [number, number]) : []));
   const close = () => {
@@ -33,13 +35,13 @@ function EditBody() {
       <p className="muted small">Target curve for the {target.side === 'left' ? '-Y (left)' : '+Y (right)'} corner. Points are put in ascending x order when this window is closed.</p>
       <div className="tblwrap">
         <table className="ctable" data-testid="userline-table">
-          <thead><tr><th>#</th><th>X</th><th>Y</th><th /></tr></thead>
+          <thead><tr><th>#</th><th>X{target.xUnit ? ` (${unitText(target.xUnit)})` : ''}</th><th>Y{target.yUnit ? ` (${unitText(target.yUnit)})` : ''}</th><th /></tr></thead>
           <tbody>
             {rows.map((r, i) => (
               <tr key={i}>
                 <td className="no">{i + 1}</td>
-                <td><NumberCell value={r[0]} digits={4} onCommit={(v) => set(i, 0, v)} /></td>
-                <td><NumberCell value={r[1]} digits={4} onCommit={(v) => set(i, 1, v)} /></td>
+                <td><NumberCell unit={target.xUnit} value={r[0]} digits={4} onCommit={(v) => set(i, 0, v)} /></td>
+                <td><NumberCell unit={target.yUnit} value={r[1]} digits={4} onCommit={(v) => set(i, 1, v)} /></td>
                 <td><button className="icon" aria-label={`Remove point ${i + 1}`} onClick={() => setRows(rows.filter((_, j) => j !== i))}>✕</button></td>
               </tr>
             ))}

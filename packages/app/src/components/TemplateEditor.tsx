@@ -5,6 +5,7 @@ import {
 } from '@claudus/core';
 import { useApp } from '../store';
 import { NumberCell } from './PointTable';
+import { fmtUnit, unitText, useUnitSettings } from '../units';
 
 /** General type names, as SHARK's template settings panel lists them. */
 export const GEN_LABELS: [GenType, string][] = [
@@ -172,6 +173,7 @@ function PartsTab({ draft, update }: Edit) {
 }
 
 function PointsTab({ draft, update }: Edit) {
+  useUnitSettings();
   const nextNo = () => Math.max(0, ...draft.points.map((p) => p.no)) + 1;
   const addPoint = (dummy: boolean) => update((t) => {
     const first = t.points.find((p) => !p.dummy);
@@ -195,8 +197,8 @@ function PointsTab({ draft, update }: Edit) {
             <td><input value={p.label} onChange={(e) => update((t) => { t.points[i].label = e.target.value; })} /></td>
             {[0, 1, 2].map((k) => (
               <td key={k}>
-                {p.dummy ? <span className="muted">{placed[i]?.[k]?.toFixed(1)}</span> : (
-                  <NumberCell value={p.def[k]} onCommit={(v) => update((t) => { t.points[i].def[k] = v; })} />
+                {p.dummy ? <span className="muted">{placed[i]?.[k] === undefined ? '' : fmtUnit('mm', placed[i][k], 1)}</span> : (
+                  <NumberCell unit="mm" value={p.def[k]} onCommit={(v) => update((t) => { t.points[i].def[k] = v; })} />
                 )}
               </td>
             ))}
@@ -266,6 +268,7 @@ function SettingsTab({ draft, update }: Edit) {
 }
 
 function DummyCells({ p, i, update }: { p: TemplatePoint; i: number; update: Edit['update'] }) {
+  useUnitSettings();
   const d = p.dummy!;
   const set = (f: (d: NonNullable<TemplatePoint['dummy']>) => void) => update((t) => f(t.points[i].dummy!));
   return (
@@ -281,7 +284,7 @@ function DummyCells({ p, i, update }: { p: TemplatePoint; i: number; update: Edi
           <option value="[0,0,1]">along Z</option>
         </select>
       )}
-      by <NumberCell value={d.offset} onCommit={(v) => set((x) => { x.offset = v; })} /> mm
+      by <NumberCell unit="mm" value={d.offset} onCommit={(v) => set((x) => { x.offset = v; })} /> {unitText('mm')}
     </span>
   );
 }

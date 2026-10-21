@@ -11,6 +11,7 @@ import { TransferMenu } from './TransferMenu';
 import { ComplianceMenus } from './ComplianceMenu';
 import { GraphsMenu } from './GraphsMenu';
 import { RideHeightMenu } from './RideHeightMenu';
+import { ViewMenu } from './ViewMenu';
 
 export function Toolbar({ analysis }: { analysis: AnalysisState }) {
   const { model, fileName, dirty, end, setModel, setEnd, markSaved } = useApp();
@@ -57,6 +58,7 @@ export function Toolbar({ analysis }: { analysis: AnalysisState }) {
       <button onClick={open}>Open…</button>
       <button onClick={save}>Save</button>
       {!two && <button onClick={exportSdf} disabled={!analysis.results || analysis.busy}>Export SDF</button>}
+      {!two && <ViewMenu />}
       {!two && <TemplateMenu onError={setError} />}
       {!two && <GraphicsMenu />}
       {!two && <GraphsMenu results={analysis.results} busy={analysis.busy} />}

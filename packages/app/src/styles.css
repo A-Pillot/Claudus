@@ -27,14 +27,14 @@ select { background: var(--panel2); border: 1px solid var(--line); border-radius
   height: 100%;
   display: grid;
   grid-template-columns: 400px minmax(300px, 1fr) 290px;
-  grid-template-rows: 44px minmax(260px, 1fr) auto 320px;
+  grid-template-rows: minmax(44px, auto) minmax(260px, 1fr) auto 320px;
   grid-template-areas:
     'tool tool tool'
     'side view live'
     'side art live'
     'side bottom bottom';
 }
-.toolbar { grid-area: tool; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.toolbar { grid-area: tool; display: flex; align-items: center; gap: 6px; padding: 4px 12px; flex-wrap: wrap; min-height: 44px; border-bottom: 1px solid var(--line); background: var(--panel); }
 .brand { font-weight: 700; letter-spacing: 0.5px; margin-right: 8px; }
 .sep { width: 1px; height: 22px; background: var(--line); margin: 0 4px; }
 .seg { display: inline-flex; }
@@ -326,3 +326,13 @@ table.grid tr.st-undefined td, table.grid tr.st-derived td { opacity: 0.75; }
 .dialog .muted { color: var(--muted); margin: 0 0 4px; }
 .overlay.fbtable { left: auto; right: 12px; top: 44px; max-width: 60%; font-size: 11px; }
 .fbtable .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+
+/* units and animation export */
+.unitstable td { vertical-align: middle; }
+.unitstable select { max-width: 130px; }
+.framelist { display: flex; flex-wrap: wrap; gap: 6px; max-height: 120px; overflow: auto; }
+.framelist .frame { display: flex; flex-direction: column; align-items: center; gap: 2px; position: relative; }
+.framelist .frame img { width: 72px; border: 1px solid var(--line); border-radius: 3px; }
+.framelist .frame .icon { position: absolute; top: 0; right: 0; padding: 0 4px; font-size: 10px; }
+.dialog progress { width: 100%; }
+.toolbar button { white-space: nowrap; }
