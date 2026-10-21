@@ -5,15 +5,17 @@
  * share the 2D inner point, so the arm axis is along X), the outer ball joints (or strut top) and the wheel
  * centre. Points the 2D model does not have (dampers, springs, track rod, rockers) keep the template's
  * default layout, carried along with the part they belong to: upright points move with the upright, arm
- * points with their arm, body points with the average shift of the inner pivots. The extra 3D data the
- * dialog asks for is the wheelbase, castor angle and tyre rolling radius.
+ * points with their arm, body points with the average shift of the inner pivots. On a double wishbone the
+ * inner track rod point is then placed for no bump steer, and the upper ball joint (or strut) starts straight
+ * above the lower one so the castor asked for is the castor the model gets. The extra 3D data the dialog
+ * asks for is the wheelbase, castor angle and tyre rolling radius.
  */
 import { newModel } from '../model/new.js';
 import type { End, Model } from '../model/types.js';
 import type { Vec3 } from '../math/vec3.js';
 import { dataPoints, GROUND } from '../template/types.js';
 import { getTemplate } from '../template/index.js';
-import { geometry2D } from './solve.js';
+import { geometry2D, intersectLines } from './solve.js';
 import type { Model2D, P2 } from './types.js';
 
 /** Which template point numbers play which role. */
@@ -37,6 +39,8 @@ const LAYOUTS: Record<number, Layout> = {
 };
 
 const WHEEL_CENTRE = 19;
+const TRACK_ROD_OUTER = 11;
+const TRACK_ROD_INNER = 12;
 const STUB_AXLE = 18;
 
 /** The 3D template numbers a 2D model of this type can be converted to. */
@@ -53,11 +57,18 @@ export interface TwoDConvertOptions {
 
 export const defaultTwoDConvertOptions = (m: Model2D): TwoDConvertOptions => ({ slot: convertTargets(m.type)[0], end: 'front', wheelbase: 2240, castor: 0, rollingRadius: 225 });
 
-/** Map a point with the 2D rigid motion that takes segment a0-b0 onto a1-b1 (X is left alone). */
-function segmentMap(a0: P2, b0: P2, a1: P2, b1: P2): (p: Vec3) => Vec3 {
+/**
+ * Map a point with the 2D similarity (rotation and uniform scale) that takes segment a0-b0 onto a1-b1, X left
+ * alone. Scaling keeps a point at the same place relative to the segment when its length changes: a push rod
+ * end halfway along an arm stays halfway along it. Strut models keep the plain rigid motion, which follows
+ * their 2D results more closely.
+ */
+function segmentMap(a0: P2, b0: P2, a1: P2, b1: P2, scaled = true): (p: Vec3) => Vec3 {
   const ang = Math.atan2(b1[1] - a1[1], b1[0] - a1[0]) - Math.atan2(b0[1] - a0[1], b0[0] - a0[0]);
-  const c = Math.cos(ang);
-  const s = Math.sin(ang);
+  const l0 = Math.hypot(b0[0] - a0[0], b0[1] - a0[1]);
+  const k = scaled && l0 > 1e-9 ? Math.hypot(b1[0] - a1[0], b1[1] - a1[1]) / l0 : 1;
+  const c = k * Math.cos(ang);
+  const s = k * Math.sin(ang);
   return (p) => {
     const dy = p[1] - a0[0];
     const dz = p[2] - a0[1];
@@ -82,9 +93,10 @@ export function convert2DTo3D(m: Model2D, o: TwoDConvertOptions): Model {
   const top0 = mid(layout.upperOuter.map(get));
   const li0 = mid(layout.lowerPivots.map(get));
   const ui0 = layout.upperPivots ? mid(layout.upperPivots.map(get)) : li0;
-  const lowerArm = segmentMap(li0, lo0, geo.lowerInner, geo.lowerOuter);
+  const scaled = !!layout.upperPivots;
+  const lowerArm = segmentMap(li0, lo0, geo.lowerInner, geo.lowerOuter, scaled);
   const upperArm = layout.upperPivots ? segmentMap(ui0, top0, geo.upperInner, geo.upperOuter) : lowerArm;
-  const upright = segmentMap(lo0, top0, geo.lowerOuter, geo.upperOuter);
+  const upright = segmentMap(lo0, top0, geo.lowerOuter, geo.upperOuter, scaled);
   const bodyShift: P2 = layout.upperPivots
     ? [((geo.lowerInner[0] - li0[0]) + (geo.upperInner[0] - ui0[0])) / 2, ((geo.lowerInner[1] - li0[1]) + (geo.upperInner[1] - ui0[1])) / 2]
     : [geo.lowerInner[0] - li0[0], geo.lowerInner[1] - li0[1]];
@@ -118,6 +130,21 @@ export function convert2DTo3D(m: Model2D, o: TwoDConvertOptions): Model {
   if (layout.upperPivots) put(layout.upperPivots, geo.upperInner);
   put(layout.lowerOuter, geo.lowerOuter);
   put(layout.upperOuter, geo.upperOuter);
+  // Track rod inner point (double wishbone): on the line between the inner pivots, where the line from the
+  // instant centre through the outer track rod point meets it. That gives no bump steer to first order.
+  const trInner = tp.find((p) => p.no === TRACK_ROD_INNER);
+  const trOuter = out.get(TRACK_ROD_OUTER);
+  if (layout.upperPivots && trInner && trOuter && [trInner.part1, trInner.part2].includes(GROUND)) {
+    const o: P2 = [trOuter[1], trOuter[2]];
+    const lowerDir: P2 = [geo.lowerOuter[0] - geo.lowerInner[0], geo.lowerOuter[1] - geo.lowerInner[1]];
+    const upperDir: P2 = [geo.upperOuter[0] - geo.upperInner[0], geo.upperOuter[1] - geo.upperInner[1]];
+    const ic = intersectLines(geo.lowerInner, lowerDir, geo.upperInner, upperDir);
+    // Parallel arms: the instant centre is at infinity along them.
+    const dir: P2 = ic ? [o[0] - ic[0], o[1] - ic[1]] : lowerDir;
+    const bodyDir: P2 = [geo.upperInner[0] - geo.lowerInner[0], geo.upperInner[1] - geo.lowerInner[1]];
+    const at = intersectLines(o, dir, geo.lowerInner, bodyDir);
+    if (at) out.set(TRACK_ROD_INNER, [get(TRACK_ROD_INNER)[0], at[0], at[1]]);
+  }
   if (layout.axis) {
     // Slider axis points keep their default distance from the strut top, along the damper angle.
     const top = get(layout.upperOuter[0]);
@@ -126,6 +153,8 @@ export function convert2DTo3D(m: Model2D, o: TwoDConvertOptions): Model {
       out.set(no, [get(no)[0], geo.upperOuter[0] + d * Math.sin(geo.damper), geo.upperOuter[1] - d * Math.cos(geo.damper)]);
     }
   }
+  // The castor asked for is the whole castor: the upper ball joint (or strut) starts above the lower one in X.
+  for (const no of [...layout.upperOuter, ...(layout.axis ?? [])]) out.set(no, [get(layout.lowerOuter[0])[0], ...out.get(no)!.slice(1)] as Vec3);
   // Wheel centre above the contact patch; the stub axle point keeps its default inboard offset.
   const wc0 = get(WHEEL_CENTRE);
   const sp0 = get(STUB_AXLE);
