@@ -60,10 +60,12 @@ SHARK `.dat` model files, solves the suspension kinematics, and lists the same s
   existing file. A preview shows every match before anything is applied.
 - **Groups:** create, edit, delete and joggle point groups (stored in the `.dat` GROUPS section), plus saved point
   sets (Data / Coordinates) and Add End from File.
+- **Set Ride Height:** SHARK's five utilities (Bump, Bump + Pitch, Adjust Springs, Match to Springs, Match to
+  Weight Change) under the Ride height menu. Spring fitted lengths follow the geometry when the body moves.
 
 Next up:
 - Modal, forced response and optimiser screens.
-- Display units, AVI export and ride height utilities.
+- Display units and AVI export.
 
 ## Use
 
