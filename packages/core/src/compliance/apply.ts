@@ -1,6 +1,7 @@
 /**
  * Turning a kinematic corner into a compliant one.
  */
+import type { Vec3 } from '../math/vec3.js';
 import type { End } from '../model/types.js';
 import type { Corner, CornerState } from '../solver/corner.js';
 import { solveCompliance, type ComplianceResult } from './solve.js';
@@ -22,7 +23,13 @@ export function complianceAt(c: Corner, st: CornerState, data: ComplianceData, s
 
 /** Make every solve of this corner compliant, so all derivatives come from the deformed geometry. */
 export function makeCompliant(c: Corner, data: ComplianceData, set = data.activeSet): Corner {
-  c.deform = (st) => complianceAt(c, st, data, set).points;
+  const results = new WeakMap<Vec3[], ComplianceResult>();
+  c.compliantResults = results;
+  c.deform = (st) => {
+    const r = complianceAt(c, st, data, set);
+    results.set(r.points, r);
+    return r.points;
+  };
   return c;
 }
 

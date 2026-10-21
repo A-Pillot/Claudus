@@ -10,6 +10,7 @@ import { solveLinear } from '../math/linalg.js';
 import type { End, SuspensionData } from '../model/types.js';
 import { getTemplate } from '../template/registry.js';
 import { GenType, findGen, type Template } from '../template/types.js';
+import type { ComplianceResult } from '../compliance/solve.js';
 import { Mechanism, tyreContactPoint, wheelLowestZ, type Drive } from './mechanism.js';
 
 export interface Articulation {
@@ -94,6 +95,9 @@ export class Corner {
    * spring and external loads. Derivatives are then measured on the deformed geometry.
    */
   deform?: (kinematic: CornerState) => Vec3[];
+
+  /** Compliant solutions behind the deformed point arrays that `deform` returned, for results such as tyre force. */
+  compliantResults?: WeakMap<Vec3[], ComplianceResult>;
 
   /** Kinematic solve for a drive, followed by the deformation when one is set. */
   solveDrive(drive: Drive, warm?: number[]): { points: Vec3[]; x: number[]; converged: boolean } {

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
-import { deviation, leftRows, lineFromData, lineKey, measureColumns, unitFactor, unitText, type End, type EndAnalysis, type Side, type Sweep, type UserLine } from '@claudus/core';
+import { deviation, leftRows, lineFromData, lineKey, measureColumns, SWEEP_VARIABLES, unitFactor, unitText, valueOf, type End, type EndAnalysis, type Side, type ResultVar, type Sweep, type UserLine } from '@claudus/core';
 import { useApp } from '../store';
 import { useLab } from '../lab';
 import { defaultOptions, defaultStyle, drawMarker, GraphStyleDialog, type GraphOptions, type Marker } from './GraphOptions';
@@ -11,64 +11,13 @@ type Mode = 'bump' | 'roll' | 'steer';
 
 interface VarDef { key: string; label: string; unit: string; get: (row: any) => number }
 
-const g = (key: string) => (r: any) => r[key] as number;
+const asVar = (v: ResultVar): VarDef => ({ key: v.key, label: v.label, unit: v.unit, get: (r) => valueOf(r, v.key) });
 
+// The variable lists live in core, shared with the SDF and spline listings.
 export const VARIABLES: Record<Mode, { x: VarDef; ys: VarDef[] }> = {
-  bump: {
-    x: { key: 'bump', label: 'Bump travel', unit: 'mm', get: g('bump') },
-    ys: [
-      { key: 'camber', label: 'Camber angle', unit: 'deg', get: g('camber') },
-      { key: 'toeSae', label: 'Toe angle (SAE)', unit: 'deg', get: g('toeSae') },
-      { key: 'toePlane', label: 'Toe angle (wheel plane)', unit: 'deg', get: g('toePlane') },
-      { key: 'castor', label: 'Castor angle', unit: 'deg', get: g('castor') },
-      { key: 'kingpin', label: 'Kingpin angle', unit: 'deg', get: g('kingpin') },
-      { key: 'castorTrail', label: 'Castor trail', unit: 'mm', get: g('castorTrail') },
-      { key: 'castorOffset', label: 'Castor offset', unit: 'mm', get: g('castorOffset') },
-      { key: 'mechanicalTrail', label: 'Mechanical trail', unit: 'mm', get: g('mechanicalTrail') },
-      { key: 'kingpinOffsetWheel', label: 'Kingpin offset at wheel', unit: 'mm', get: g('kingpinOffsetWheel') },
-      { key: 'kingpinOffsetGround', label: 'Kingpin offset at ground', unit: 'mm', get: g('kingpinOffsetGround') },
-      { key: 'damperRatio', label: 'Damper ratio', unit: '', get: g('damperRatio') },
-      { key: 'springRatio', label: 'Spring ratio', unit: '', get: g('springRatio') },
-      { key: 'antiDive', label: 'Anti dive', unit: '%', get: g('antiDive') },
-      { key: 'antiSquat', label: 'Anti squat', unit: '%', get: g('antiSquat') },
-      { key: 'rollCentreToBody', label: 'Roll centre height to body', unit: 'mm', get: g('rollCentreToBody') },
-      { key: 'rollCentreToGround', label: 'Roll centre height to ground', unit: 'mm', get: g('rollCentreToGround') },
-      { key: 'halfTrackChange', label: 'Half track change', unit: 'mm', get: g('halfTrackChange') },
-      { key: 'wheelbaseChange', label: 'Wheelbase change', unit: 'mm', get: g('wheelbaseChange') },
-      { key: 'damperTravel', label: 'Damper travel', unit: 'mm', get: g('damperTravel') },
-      { key: 'springTravel', label: 'Spring travel', unit: 'mm', get: g('springTravel') },
-    ],
-  },
-  roll: {
-    x: { key: 'roll', label: 'Roll angle', unit: 'deg', get: g('roll') },
-    ys: [
-      { key: 'camber', label: 'Camber angle', unit: 'deg', get: g('camber') },
-      { key: 'toeSae', label: 'Toe angle (SAE)', unit: 'deg', get: g('toeSae') },
-      { key: 'castor', label: 'Castor angle', unit: 'deg', get: g('castor') },
-      { key: 'kingpin', label: 'Kingpin angle', unit: 'deg', get: g('kingpin') },
-      { key: 'damperRatio', label: 'Damper ratio', unit: '', get: g('damperRatio') },
-      { key: 'springRatio', label: 'Spring ratio', unit: '', get: g('springRatio') },
-      { key: 'rollCentreY', label: 'Roll centre Y', unit: 'mm', get: (r) => r.rollCentre[1] },
-      { key: 'rollCentreZ', label: 'Roll centre Z', unit: 'mm', get: (r) => r.rollCentre[2] },
-      { key: 'halfTrackChange', label: 'Half track change', unit: 'mm', get: g('halfTrackChange') },
-      { key: 'wheelbaseChange', label: 'Wheelbase change', unit: 'mm', get: g('wheelbaseChange') },
-      { key: 'damperTravel', label: 'Damper travel', unit: 'mm', get: g('damperTravel') },
-      { key: 'springTravel', label: 'Spring travel', unit: 'mm', get: g('springTravel') },
-    ],
-  },
-  steer: {
-    x: { key: 'rack', label: 'Rack travel', unit: 'mm', get: g('rack') },
-    ys: [
-      { key: 'toeInner', label: 'Toe angle, inner wheel', unit: 'deg', get: g('toeInner') },
-      { key: 'toeOuter', label: 'Toe angle, outer wheel', unit: 'deg', get: g('toeOuter') },
-      { key: 'camberInner', label: 'Camber, inner wheel', unit: 'deg', get: g('camberInner') },
-      { key: 'camberOuter', label: 'Camber, outer wheel', unit: 'deg', get: g('camberOuter') },
-      { key: 'steerInner', label: 'Steer angle, inner wheel', unit: 'deg', get: g('steerInner') },
-      { key: 'steerOuter', label: 'Steer angle, outer wheel', unit: 'deg', get: g('steerOuter') },
-      { key: 'ackermann', label: 'Ackermann', unit: '%', get: g('ackermann') },
-      { key: 'turningRadius', label: 'Turning radius', unit: 'mm', get: g('turningRadius') },
-    ],
-  },
+  bump: { x: asVar(SWEEP_VARIABLES.bump.x), ys: SWEEP_VARIABLES.bump.ys.map(asVar) },
+  roll: { x: asVar(SWEEP_VARIABLES.roll.x), ys: SWEEP_VARIABLES.roll.ys.map(asVar) },
+  steer: { x: asVar(SWEEP_VARIABLES.steer.x), ys: SWEEP_VARIABLES.steer.ys.map(asVar) },
 };
 
 /** The plottable results of the measurement elements (distance, components, angle) of every end's template. */
