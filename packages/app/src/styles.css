@@ -151,6 +151,22 @@ table.grid select { max-width: 220px; }
 .check .warn { color: #e8c76a; }
 .actions .muted { margin-right: auto; }
 
+/* graphics elements and menu */
+.glabel { background: rgba(14, 17, 21, 0.82); border: 1px solid currentColor; border-radius: 4px; padding: 1px 6px; font: 600 12px/1.4 system-ui, sans-serif; white-space: nowrap; }
+.plabel { color: #dfe6ee; font: 11px/1.2 ui-monospace, monospace; white-space: nowrap; text-shadow: 0 0 3px #000, 0 0 3px #000; }
+.plabel b { color: #ffd479; }
+.menuhead { padding: 4px 10px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+.menulist button.grouphead { width: 100%; font-weight: 600; }
+.menulist button.sub { width: 100%; padding-left: 26px; }
+.menulist button.sub.on { background: #2c2a17; }
+.menulist .tick { display: inline-block; width: 18px; }
+.elemlist { max-height: 220px; overflow: auto; display: flex; flex-direction: column; }
+.addbanner { position: absolute; left: 12px; right: 12px; bottom: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; background: rgba(23, 27, 33, 0.94); border: 1px solid #ff8a3d; border-radius: 6px; padding: 6px 10px; }
+.addbanner label { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
+.addbanner input { width: 70px; }
+.measures { margin-top: 10px; }
+.measures th { text-align: left; color: var(--muted); font-weight: 500; }
+.measures .comps { color: var(--muted); font-size: 11px; }
 /* hard point import/export and groups */
 .dialog.transfer { gap: 6px; }
 .dialog .small { font-size: 11px; margin-right: 0; }

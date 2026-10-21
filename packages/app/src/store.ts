@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { completeModel, getTemplate, hasTemplate, newModel, registerTemplate, remapPoints, type End, type Model, type Template, type Vec3, type VehicleParams } from '@claudus/core';
+import type { ElementOption } from '@claudus/core';
 import { addToLibrary, loadLibrary } from './templates';
 
 loadLibrary();
@@ -10,7 +11,32 @@ export interface ArticulationState {
   rack: number;
 }
 
+/** Which extras the 3D view draws (SHARK's Graphics menu toggles). */
+export interface GraphicsView {
+  pointNos: boolean;
+  pointValues: boolean;
+  /** Show the left side of a single-corner template as a mirror image. */
+  bothSides: boolean;
+  triad: boolean;
+}
+
+/** An element being added: the picks made so far, in order. */
+export interface AddMode {
+  option: ElementOption;
+  /** The typed-in numbers (radius, vector...). */
+  params: number[];
+  /** Point numbers picked so far. */
+  picked: number[];
+}
+
 export interface AppState {
+  view: GraphicsView;
+  setView: (v: Partial<GraphicsView>) => void;
+  addMode: AddMode | null;
+  setAddMode: (a: AddMode | null) => void;
+  /** Index of the graphic element picked in the 3D view (in the template's graphics list). */
+  selectedGraphic: number | null;
+  selectGraphic: (i: number | null) => void;
   model: Model;
   fileName: string;
   dirty: boolean;
@@ -47,15 +73,21 @@ export const useApp = create<AppState>((set) => ({
   end: 'front',
   art: zeroArt,
   selected: null,
+  view: { pointNos: false, pointValues: false, bothSides: true, triad: false },
+  setView: (v) => set((s) => ({ view: { ...s.view, ...v } })),
+  addMode: null,
+  setAddMode: (addMode) => set({ addMode }),
+  selectedGraphic: null,
+  selectGraphic: (selectedGraphic) => set({ selectedGraphic }),
   revision: 0,
   templatesRev: 0,
   setModel: (loaded, fileName) =>
     set((s) => {
       // Templates saved in the file come first, so its suspensions can find them.
       loaded.templates?.forEach(registerTemplate);
-      return { model: completeModel(loaded), fileName, templatesRev: s.templatesRev + (loaded.templates?.length ? 1 : 0), dirty: false, end: loaded.front ? 'front' : 'rear', art: zeroArt, selected: null, revision: s.revision + 1 };
+      return { model: completeModel(loaded), fileName, templatesRev: s.templatesRev + (loaded.templates?.length ? 1 : 0), dirty: false, end: loaded.front ? 'front' : 'rear', art: zeroArt, selected: null, selectedGraphic: null, addMode: null, revision: s.revision + 1 };
     }),
-  setEnd: (end) => set({ end, art: zeroArt, selected: null }),
+  setEnd: (end) => set({ end, art: zeroArt, selected: null, selectedGraphic: null, addMode: null }),
   setArt: (a) => set((s) => ({ art: { ...s.art, ...a } })),
   select: (selected) => set({ selected }),
   setPoint: (index, axis, value) =>
@@ -85,6 +117,7 @@ export const useApp = create<AppState>((set) => ({
         dirty: true,
         art: zeroArt,
         selected: null,
+        selectedGraphic: null,
         revision: s.revision + 1,
         templatesRev: s.templatesRev + 1,
       };

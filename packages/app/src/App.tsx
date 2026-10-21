@@ -8,6 +8,7 @@ import { Viewer3D } from './components/Viewer3D';
 import { ArticulationBar } from './components/ArticulationBar';
 import { Readouts } from './components/Readouts';
 import { Graphs } from './components/Graphs';
+import { AddBanner } from './components/GraphicsMenu';
 import { GroupsPanel } from './components/GroupsPanel';
 import { SdfView } from './components/SdfView';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -36,6 +37,7 @@ export function App() {
         {corner && state ? (
           <>
             <ErrorBoundary resetKey={revision}><Viewer3D corner={corner} state={state} /></ErrorBoundary>
+            <AddBanner />
             {label && <div className="overlay">Point {label.no}: {label.label}</div>}
             {!state.right.converged && <div className="overlay warn">The suspension cannot reach this position.</div>}
           </>

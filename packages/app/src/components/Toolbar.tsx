@@ -5,6 +5,7 @@ import { useApp } from '../store';
 import { files } from '../files';
 import { templatesForModel } from '../templates';
 import { TemplateMenu } from './TemplateMenu';
+import { GraphicsMenu } from './GraphicsMenu';
 import { TransferMenu } from './TransferMenu';
 
 export function Toolbar({ analysis }: { analysis: AnalysisState }) {
@@ -40,6 +41,7 @@ export function Toolbar({ analysis }: { analysis: AnalysisState }) {
       <button onClick={save}>Save</button>
       <button onClick={exportSdf} disabled={!analysis.results || analysis.busy}>Export SDF</button>
       <TemplateMenu onError={setError} />
+      <GraphicsMenu />
       <TransferMenu onError={setError} />
       <span className="sep" />
       <div className="seg">

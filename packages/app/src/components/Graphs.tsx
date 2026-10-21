@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
-import type { EndAnalysis } from '@claudus/core';
+import { measureColumns, type EndAnalysis } from '@claudus/core';
 import { useApp } from '../store';
 
 type Mode = 'bump' | 'roll' | 'steer';
@@ -68,6 +68,15 @@ export const VARIABLES: Record<Mode, { x: VarDef; ys: VarDef[] }> = {
   },
 };
 
+/** The plottable results of the measurement elements (distance, components, angle) of every end's template. */
+function measureVars(results?: EndAnalysis[]): VarDef[] {
+  const seen = new Map<string, VarDef>();
+  for (const e of results ?? [])
+    for (const c of measureColumns(e.corner.template))
+      if (!seen.has(c.key)) seen.set(c.key, { key: c.key, label: c.label, unit: c.unit, get: (r) => r.measures?.[c.key] ?? NaN });
+  return [...seen.values()];
+}
+
 const END_COLOURS = { front: '#4e9fe5', rear: '#f28e2b' } as const;
 const DEFAULTS: { mode: Mode; key: string }[] = [
   { mode: 'bump', key: 'camber' },
@@ -94,7 +103,9 @@ export function Graphs({ results }: { results?: EndAnalysis[] }) {
 }
 
 function GraphCard({ results, mode, varKey, onChange }: { results?: EndAnalysis[]; mode: Mode; varKey: string; onChange: (m: Mode, k: string) => void }) {
-  const def = VARIABLES[mode];
+  const base = VARIABLES[mode];
+  const extra = useMemo(() => measureVars(results), [results]);
+  const def = useMemo(() => ({ x: base.x, ys: [...base.ys, ...extra] }), [base, extra]);
   const y = def.ys.find((v) => v.key === varKey) ?? def.ys[0];
   const art = useApp((s) => s.art);
   const current = mode === 'bump' ? art.bump : mode === 'roll' ? art.roll : art.rack;
