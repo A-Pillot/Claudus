@@ -52,9 +52,18 @@ export function freeBody(c: Corner, kinematic: Vec3[], comp: ComplianceData, det
     forces.push({ kind: 'joint', point: j.point, label: label(j.point), at: pos, force: p.part2 === part ? j.force : scale(j.force, -1) });
   }
 
-  // Suspension springs push their two ends apart: the preload force plus the rate times the extra compression.
+  // Strut tops: the strut's sideways location in its top mount, which is not a template joint.
+  for (const sf of detail.strutForces ?? []) {
+    const pos = at(sf.point);
+    if (!pos) continue;
+    if (sf.strutPart === part) forces.push({ kind: 'joint', point: sf.point, label: `${label(sf.point)} (strut guide)`, at: pos, force: scale(sf.force, -1) });
+    else if (sf.otherPart === part) forces.push({ kind: 'joint', point: sf.point, label: `${label(sf.point)} (strut guide)`, at: pos, force: sf.force });
+  }
+
+  // Suspension springs push their two ends apart: the preload force (when it is included) plus the rate
+  // times the extra compression. The solver always has the rate, so the spring is always on the diagram.
   const data = endCompliance(comp, c.end);
-  if (comp.settings.includeSpring) {
+  {
     const pairs: [GenType, GenType][] = [[GenType.Spring1ToSuspension, GenType.Spring1ToBody], [GenType.Spring2ToSuspension, GenType.Spring2ToBody]];
     pairs.forEach(([sg, bg], k) => {
       const sp = findGen(t, sg);
@@ -67,7 +76,7 @@ export function freeBody(c: Corner, kinematic: Vec3[], comp: ComplianceData, det
       const partOf = (q: typeof sp) => (q.part1 === GROUND ? q.part2 : q.part1);
       const axis = normalize(sub(kinematic[si], kinematic[bi]));
       const stretch = dot(axis, sub(sub(points[si], kinematic[si]), sub(points[bi], kinematic[bi])));
-      const n = scale(axis, f - data.springs[k].rate * stretch);
+      const n = scale(axis, (comp.settings.includeSpring ? f : 0) - data.springs[k].rate * stretch);
       if (partOf(sp) === part) forces.push({ kind: 'spring', point: sp.no, label: `Spring ${k + 1}`, at: ps, force: n });
       if (partOf(bp) === part && partOf(bp) !== partOf(sp)) forces.push({ kind: 'spring', point: bp.no, label: `Spring ${k + 1}`, at: pb, force: scale(n, -1) });
     });

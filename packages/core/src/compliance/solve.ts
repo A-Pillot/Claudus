@@ -28,6 +28,13 @@ export interface JointResult {
   forceLocal: Vec3;
 }
 
+export interface StrutForce {
+  point: number;
+  strutPart: number;
+  otherPart: number;
+  force: Vec3;
+}
+
 export interface ComplianceResult {
   /** Deformed positions of every template point. */
   points: Vec3[];
@@ -38,6 +45,11 @@ export interface ComplianceResult {
   springForces: [number, number];
   /** Vertical tyre loads from the compliant solve, N, one per wheel. */
   tyreLoads: number[];
+  /**
+   * Strut top guides (not template joints): the force on `otherPart` (GROUND for the body) from the strut part,
+   * at the damper-to-body point. The strut part gets the opposite force.
+   */
+  strutForces?: StrutForce[];
 }
 
 /** One linear spring element between two bodies (body -1 is ground). */
@@ -54,6 +66,8 @@ interface Element {
   report: boolean;
   /** Damping loss angle, deg (bushes only). */
   loss?: number;
+  /** A strut top guide: the strut's part and the part it is guided by (GROUND for the body). */
+  strut?: { strutPart: number; otherPart: number };
 }
 
 /** A damper: an axial dashpot between two bodies. */
@@ -287,7 +301,9 @@ export function buildCompliance(c: Corner, st: CornerState, data: EndCompliance,
     const R = bushAxes(pts[ti], add(pts[ti], axis));
     const strutBody = body(sp.part1);
     const topBody = body(tp.part1 === GROUND ? tp.part2 : tp.part1);
-    elements.push({ a: strutBody, b: topBody === strutBody ? -1 : topBody, at: pts[ti], R, kt: [s.rigid, s.rigid, 0], kr: [0, 0, 0], point: tp.no, bushed: false, report: false });
+    const topPart = tp.part1 === GROUND ? tp.part2 : tp.part1;
+    const strut = { strutPart: sp.part1, otherPart: topPart === sp.part1 ? GROUND : topPart };
+    elements.push({ a: strutBody, b: topBody === strutBody ? -1 : topBody, at: pts[ti], R, kt: [s.rigid, s.rigid, 0], kr: [0, 0, 0], point: tp.no, bushed: false, report: false, strut });
   }
 
   // Tyres: a vertical spring from each contact point to the ground.
@@ -405,18 +421,20 @@ export function solveCompliance(c: Corner, st: CornerState, data: EndCompliance,
   };
 
   const points = t.points.map((p, i) => add(pts[i], move(body(p.part1 === GROUND ? p.part2 : p.part1), pts[i])));
-  const joints: JointResult[] = elements.filter((e) => e.report).map((e) => {
+  const resultOf = (e: (typeof elements)[number]) => {
     const d = sub(move(e.a, e.at), move(e.b, e.at));
     const dl = mulM(e.R, d);
     const fl: Vec3 = [dl[0] * e.kt[0], dl[1] * e.kt[1], dl[2] * e.kt[2]];
     const f = add(add(scale(e.R[0], fl[0]), scale(e.R[1], fl[1])), scale(e.R[2], fl[2]));
     return { point: e.point, bushed: e.bushed, deflection: d, deflectionLocal: dl, force: f, forceLocal: fl };
-  });
+  };
+  const joints: JointResult[] = elements.filter((e) => e.report).map(resultOf);
+  const strutForces: StrutForce[] = elements.flatMap((e) => (e.strut ? [{ point: e.point, ...e.strut, force: resultOf(e).force }] : []));
   const tyreLoads = c.sides.map((_, k) => {
     const tcp = c.tcp(pts, k);
     return -move(wheelBodies[k], tcp)[2] * data.tyreRate;
   });
-  return { points, motions: Array.from({ length: nParts }, (_, b) => motion(b)), joints, springForces, tyreLoads };
+  return { points, motions: Array.from({ length: nParts }, (_, b) => motion(b)), joints, springForces, tyreLoads, strutForces };
 }
 
 /** Degrees from radians, for reporting small rotations. */
