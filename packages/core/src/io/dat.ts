@@ -211,15 +211,16 @@ function positions(m: Model, order: PointOrder) {
 
 // ---- writing -------------------------------------------------------------------------------------
 
-const int = (v: number) => String(Math.round(v)).padStart(13);
+// Each field starts with a space so that an over-long value never runs into its neighbour.
+const int = (v: number) => ' ' + String(Math.round(v)).padStart(12);
 /** Shortest text that reads back to exactly the same number, padded like SHARK's columns. */
 const numText = (v: number) => {
   if (Number.isInteger(v) && Math.abs(v) < 1e15) return v.toFixed(1);
   const s = String(v);
   return s.includes('e') ? v.toExponential().toUpperCase() : s;
 };
-const real = (v: number) => numText(v).padStart(27);
-const realShort = (v: number) => numText(v).padStart(16);
+const real = (v: number) => ' ' + numText(v).padStart(26);
+const realShort = (v: number) => ' ' + numText(v).padStart(15);
 
 function writeSuspension(s: SuspensionData): string[] {
   return [int(s.templateSlot), ...s.points.map((p) => p.map(real).join('')), real(s.rollingRadius)];

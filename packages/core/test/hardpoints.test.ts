@@ -124,7 +124,10 @@ describe('Adams export', () => {
   it('rewrites only the matched numbers and keeps everything else', () => {
     const m = newModel(1);
     const plan = planExport(m, 'front', sub, 'adams');
-    expect(plan.rows.filter((r) => r.status === 'found')).toHaveLength(13);
+    // strut_lower and strut_upper are each the default label of two template points: only the first gets the row.
+    expect(plan.rows.filter((r) => r.status === 'found')).toHaveLength(11);
+    expect(plan.rows.filter((r) => r.status === 'error').map((r) => r.label).sort()).toEqual(['strut_lower', 'strut_upper']);
+    expect(plan.notes).toHaveLength(2);
     const out = applyExport(m, plan, sub);
     const a = sub.split('\n');
     const b = out.split('\n');
@@ -135,9 +138,10 @@ describe('Adams export', () => {
     expect(b.filter((l) => l.startsWith("'left'"))).toEqual(a.filter((l) => l.startsWith("'left'")));
     expect(out).toContain("'single'   'steering_rack'  3750.0         0.0       300.0");
     // and the file now reads back as the model
-    // (strut_lower and strut_upper are each shared by two template points, so only those two can differ)
     const again = planImport(m, 'front', out, 'adams');
-    expect(again.rows.filter((r) => r.changes).map((r) => r.label).sort()).toEqual(['strut_lower', 'strut_upper']);
+    expect(again.rows.filter((r) => r.changes)).toEqual([]);
+    // every rewritten number is a well-formed coordinate
+    for (const i of differing) expect(b[i]).toMatch(/^'right'\s+'\w+'(\s+-?\d+\.\d+){3}\s*\r?$/);
   });
   it('round-trips with shift, scale and switch', () => {
     const s = { ...defaultTransfer(), shift: [100, -50, 0] as Vec3, scale: [1, 0.5, 1] as Vec3, switch: [0, 2, 1] as [number, number, number] };

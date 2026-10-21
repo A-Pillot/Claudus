@@ -29,7 +29,8 @@ export const TEMPLATES_SECTION = 'USER TEMPLATES';
 export class TemplateParseError extends Error {}
 
 const quote = (s: string) => `'${s.replace(/'/g, "''")}'`;
-const int = (v: number) => String(Math.round(v)).padStart(6);
+// A leading space keeps fields apart even when a value (a colour, say) is wider than the column.
+const int = (v: number) => ' ' + String(Math.round(v)).padStart(5);
 const num = (v: number) => {
   const s = Number.isInteger(v) ? v.toFixed(1) : String(v);
   return ' ' + s.padStart(13);

@@ -139,3 +139,14 @@ describe('template registry', () => {
     expect(getTemplate(1).label).not.toBe('Edited type 1');
   });
 });
+
+describe('wide template fields', () => {
+  it('keep a large graphic colour apart from its props', () => {
+    const t = structuredClone(getTemplate(1));
+    t.slot = 40;
+    t.graphics = [{ kind: t.graphics[0]?.kind ?? 'tube', points: [1, 2], props: [3.5], colour: 16711680 } as Template['graphics'][number]];
+    const [back] = parseTemplates(formatTemplates([t]));
+    expect(back.graphics[0].props).toEqual([3.5]);
+    expect(back.graphics[0].colour).toBe(16711680);
+  });
+});

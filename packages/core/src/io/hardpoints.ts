@@ -167,6 +167,22 @@ function pointSide(def: Vec3, s: TransferSettings): RowSide {
   return (s.side === 'right') !== flip ? 'right' : 'left';
 }
 
+/**
+ * Two points whose labels match the same file row would both read it on import, and both write it on export,
+ * the second over the first. Only the first point gets the row; this returns that point's number for a later one.
+ */
+function claim(claimed: Map<number, number>, line: number, no: number): number | undefined {
+  const first = claimed.get(line);
+  if (first === undefined) claimed.set(line, no);
+  return first;
+}
+
+function sharedRow(first: number, label: string, notes: string[]): { status: 'error'; message: string } {
+  const message = `Label "${label}" matches the same file row as point ${first}; not transferred`;
+  notes.push(message);
+  return { status: 'error', message };
+}
+
 /** Preview of an import: what each point would become. Nothing is changed. */
 export function planImport(model: Model, end: End, fileText: string, format: FileFormat, settings: TransferSettings = defaultTransfer(), labels?: Partial<LabelSet>): TransferPlan {
   const { data, pts, ls } = context(model, end, labels);
@@ -174,6 +190,7 @@ export function planImport(model: Model, end: End, fileText: string, format: Fil
   const working: Vec3[] = data.points.map((p) => [...p] as Vec3);
   const out: PlanRow[] = [];
   const notes: string[] = [];
+  const claimed = new Map<number, number>();
   pts.forEach((tp, i) => {
     const label = ls.point[i];
     const base = { index: i, no: tp.no, name: tp.label, label, current: data.points[i] };
@@ -193,6 +210,8 @@ export function planImport(model: Model, end: End, fileText: string, format: Fil
     }
     const row = matchRow(rows, label, pointSide(tp.def, settings));
     if (!row) return done({ status: 'missing' });
+    const first = claim(claimed, row.line, tp.no);
+    if (first !== undefined) return done(sharedRow(first, label, notes));
     done({ status: 'found', next: toModelCoords(row.value, settings) });
   });
   return { format, end, rows: out, changed: out.filter((r) => r.changes).length, notes };
@@ -211,6 +230,8 @@ export function planExport(model: Model, end: End, fileText: string, format: Fil
   const { data, pts, ls } = context(model, end, labels);
   const rows = findRows(fileText, format, settings.words);
   const out: PlanRow[] = [];
+  const notes: string[] = [];
+  const claimed = new Map<number, number>();
   pts.forEach((tp, i) => {
     const label = ls.point[i];
     const base = { index: i, no: tp.no, name: tp.label, label, current: data.points[i] };
@@ -220,10 +241,12 @@ export function planExport(model: Model, end: End, fileText: string, format: Fil
     if (isMathString(label)) return void out.push({ ...base, status: 'maths', changes: false, message: 'Worked out from other points, not written' });
     const row = matchRow(rows, label, pointSide(tp.def, settings));
     if (!row) return void out.push({ ...base, status: 'missing', changes: false });
+    const first = claim(claimed, row.line, tp.no);
+    if (first !== undefined) return void out.push({ ...base, changes: false, ...sharedRow(first, label, notes) });
     const inFile = toModelCoords(row.value, settings);
     out.push({ ...base, status: 'found', current: inFile, next: data.points[i], changes: !same(inFile, data.points[i]) });
   });
-  return { format, end, rows: out, changed: out.filter((r) => r.changes).length, notes: [] };
+  return { format, end, rows: out, changed: out.filter((r) => r.changes).length, notes };
 }
 
 /** The file text with the model's values written over the matched rows. Everything else is untouched. */
