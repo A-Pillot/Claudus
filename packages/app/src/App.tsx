@@ -19,6 +19,7 @@ import { EditUserLineDialog, ManageUserLinesDialog } from './components/UserLine
 import { KinSumPanel, OptimiserPanel } from './components/SumPanels';
 import { DisplayModeBar, FreeBodyTable, ModalPanel, SweepPanel } from './components/ModalPanels';
 import { MassDialog } from './components/MassDialog';
+import { ListingDialogs } from './components/Listings';
 import { TwoDApp } from './twod/TwoDApp';
 import { useTwoD } from './twod/store2d';
 
@@ -93,6 +94,7 @@ export function App() {
       </section>
       <ComplianceDialogs corner={corner} state={state} detail={detail} />
       <MassDialog corner={corner} state={state} />
+      <ListingDialogs results={analysis.results} />
       <EditUserLineDialog />
       <ManageUserLinesDialog />
       <KinSumPanel />
