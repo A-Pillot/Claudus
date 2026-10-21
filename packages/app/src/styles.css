@@ -273,3 +273,4 @@ table.grid tr.st-undefined td, table.grid tr.st-derived td { opacity: 0.75; }
 .coeftitle { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .coefbar { flex-wrap: wrap; }
 .ctxmenu { min-width: 260px; }
+.dialog .muted { color: var(--muted); margin: 0 0 4px; }
