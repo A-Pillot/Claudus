@@ -1,0 +1,60 @@
+import { create } from 'zustand';
+import { newModel, type End, type Model, type Vec3, type VehicleParams } from '@claudus/core';
+
+export interface ArticulationState {
+  bump: number;
+  roll: number;
+  rack: number;
+}
+
+export interface AppState {
+  model: Model;
+  fileName: string;
+  dirty: boolean;
+  /** Which end is being edited and shown. */
+  end: End;
+  art: ArticulationState;
+  selected: number | null;
+  /** Bumped on every model change so derived results know to recompute. */
+  revision: number;
+  setModel: (m: Model, fileName: string) => void;
+  setEnd: (e: End) => void;
+  setArt: (a: Partial<ArticulationState>) => void;
+  select: (i: number | null) => void;
+  setPoint: (index: number, axis: number, value: number) => void;
+  setRollingRadius: (r: number) => void;
+  setParam: <K extends keyof VehicleParams>(k: K, v: VehicleParams[K]) => void;
+  markSaved: (fileName: string) => void;
+}
+
+const zeroArt: ArticulationState = { bump: 0, roll: 0, rack: 0 };
+
+export const useApp = create<AppState>((set) => ({
+  model: newModel(1),
+  fileName: 'untitled.dat',
+  dirty: false,
+  end: 'front',
+  art: zeroArt,
+  selected: null,
+  revision: 0,
+  setModel: (model, fileName) =>
+    set((s) => ({ model, fileName, dirty: false, end: model.front ? 'front' : 'rear', art: zeroArt, selected: null, revision: s.revision + 1 })),
+  setEnd: (end) => set({ end, art: zeroArt, selected: null }),
+  setArt: (a) => set((s) => ({ art: { ...s.art, ...a } })),
+  select: (selected) => set({ selected }),
+  setPoint: (index, axis, value) =>
+    set((s) => {
+      const data = s.model[s.end];
+      if (!data || !Number.isFinite(value)) return {};
+      const points = data.points.map((p, i) => (i === index ? (p.map((v, k) => (k === axis ? value : v)) as Vec3) : p));
+      return { model: { ...s.model, [s.end]: { ...data, points } }, dirty: true, revision: s.revision + 1 };
+    }),
+  setRollingRadius: (r) =>
+    set((s) => {
+      const data = s.model[s.end];
+      if (!data || !(r > 0)) return {};
+      return { model: { ...s.model, [s.end]: { ...data, rollingRadius: r } }, dirty: true, revision: s.revision + 1 };
+    }),
+  setParam: (k, v) => set((s) => ({ model: { ...s.model, params: { ...s.model.params, [k]: v } }, dirty: true, revision: s.revision + 1 })),
+  markSaved: (fileName) => set({ fileName, dirty: false }),
+}));

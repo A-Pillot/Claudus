@@ -7,22 +7,28 @@ SHARK `.dat` model files, solves the suspension kinematics, and lists the same s
 
 ## Status
 
-Phase 1, the calculation core (`packages/core`), is done:
-
+**Phase 1, the calculation core (`packages/core`)**
 - **Templates:** 12 built-in suspension types: 1, 2, 3, 4, 6, 7, 10, 11, 14, 15, 16 and 17. Point numbers,
   labels and default coordinates match SHARK's own sample files.
-- **Files:** SHARK `.dat` model files are read and written. Sections that Claudus does not use yet, such
-  as compliance, forces and Raven data, are kept unchanged.
-- **Solver:** a kinematic solver handles bump and rebound, body roll about the static roll centre, rack
-  steer, and combinations of these.
-- **Derivatives:** camber, toe (SAE and in the wheel plane), castor, kingpin, trails and offsets, roll
-  centre (in bump and in roll), anti-dive, anti-squat, damper and spring ratio and travel, half-track and
-  wheelbase change, Ackermann and turning radius.
-- **Output:** a formatted SDF listing, from the command line.
+- **Files:** SHARK `.dat` model files are read and written. Sections Claudus does not use yet, such as
+  compliance, forces and Raven data, are kept unchanged.
+- **Solver:** handles bump and rebound, body roll about the static roll centre, rack steer, and
+  combinations of these.
+- **Derivatives:** the full SHARK set, plus a formatted SDF listing.
+
+**Phase 2, the app (`packages/app`)**
+- **3D view:** both corners of the axle, with wheels, springs, dampers and the roll centre. You can orbit
+  the view, and clicking a point selects it.
+- **Motion:** sliders for bump, roll and steer, each with an animate button.
+- **Live readouts:** camber, toe, castor, kingpin, trails, offsets, roll centre and track.
+- **Editing:** a hard point table and the general data panel. Results update as you edit.
+- **Graphs:** four configurable graphs of any derivative against bump, roll or steer, with front and rear
+  overlaid.
+- **SDF:** a listing view, with export.
+- **Files:** New (from any template), Open and Save for `.dat` files.
+- **Desktop:** a Tauri desktop app with native file dialogs.
 
 Next up:
-
-- The interactive 3D app with graphs (React, three.js, Tauri).
 - The remaining templates, the template editor and the 2D module.
 - Compliance.
 - Modal analysis, the forced-damped response and the optimiser.
@@ -31,10 +37,26 @@ Next up:
 
 ```sh
 npm install
-npm test                         # vitest
+npm run dev              # app in the browser at http://localhost:5173
+npm test                 # vitest
 npm run typecheck
-npm run sdf -- packages/core/test/samples/type1.dat    # print the derivative listing
-npm run sdf -- model.dat out.sdf                       # or write it to a file
+npm run sdf -- packages/core/test/samples/type1.dat    # derivative listing on the command line
+```
+
+### Desktop app
+
+Installers for Windows (`.msi` and `.exe`), macOS (`.dmg`) and Linux (`.AppImage` and `.deb`) are built
+by the **Desktop builds** workflow.
+
+- **Manual run:** start it from the Actions tab, then download the installers from the run's artifacts.
+- **Tagged release:** push a tag like `v0.2.0` to get a draft release with the installers attached.
+
+To build locally you need [Rust and the Tauri prerequisites](https://v2.tauri.app/start/prerequisites/).
+Then run:
+
+```sh
+npm run desktop          # run the desktop app in development
+npm run desktop:build    # build an installer for this machine
 ```
 
 ## Conventions

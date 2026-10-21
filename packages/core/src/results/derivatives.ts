@@ -296,3 +296,35 @@ export function analyse(m: Model): EndAnalysis[] {
   return out;
 }
 
+
+export interface AxleState {
+  /** Right-hand corner. */
+  right: CornerState;
+  /** The left-hand corner, solved as its right-hand mirror image (mirror its points with mirrorY to draw it). */
+  leftMirror: CornerState;
+  geometryRight: WheelGeometry;
+  geometryLeft: WheelGeometry;
+  /** Kinematic roll centre in absolute coordinates (where the two contact-path normals meet). */
+  rollCentre: Vec3;
+}
+
+/** Solve both corners of an axle at one articulation, for live display. */
+export function solveAxle(c: Corner, a: { bump?: number; roll?: number; rack?: number }, warm?: { right?: number[]; left?: number[] }): AxleState {
+  const bump = a.bump ?? 0;
+  const roll = a.roll ?? 0;
+  const rack = a.rack ?? 0;
+  const right = c.solve({ bump, roll, rack }, warm?.right);
+  const leftMirror = c.solve({ bump, roll: -roll, rack: -rack }, warm?.left);
+  const rr = c.rates(right);
+  const rl = c.rates(leftMirror);
+  const tr = c.tcp(right.points);
+  const tl = mirrorY(c.tcp(leftMirror.points));
+  const [y, z] = intersectYZ(tr, [-rr.tcp[2], rr.tcp[1]], tl, [-rl.tcp[2], -rl.tcp[1]]);
+  return {
+    right,
+    leftMirror,
+    geometryRight: wheelGeometry(c, right.points, right.groundZ),
+    geometryLeft: wheelGeometry(c, leftMirror.points, leftMirror.groundZ),
+    rollCentre: [(tr[0] + tl[0]) / 2, y, z],
+  };
+}
