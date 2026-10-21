@@ -5,10 +5,16 @@
   "description": "Claudus: a modern rebuild of the Lotus SHARK suspension analysis software",
   "license": "MIT",
   "type": "module",
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
+    "dev": "npm run dev -w @claudus/app",
+    "build": "npm run build -w @claudus/app",
+    "desktop": "npm run tauri -w @claudus/app -- dev",
+    "desktop:build": "npm run tauri -w @claudus/app -- build",
     "test": "vitest run",
-    "typecheck": "tsc -p packages/core --noEmit",
+    "typecheck": "tsc -p packages/core --noEmit && tsc -p packages/app --noEmit",
     "sdf": "tsx packages/core/src/cli.ts"
   },
   "devDependencies": {

@@ -167,3 +167,23 @@ describe('derivative sign conventions', () => {
     expect(rows[1].damperTravel).toBeLessThan(0);
   });
 });
+
+describe('solveAxle', () => {
+  it('is symmetric at static and puts the roll centre on the centreline', async () => {
+    const { solveAxle, staticValues } = await import('../src/results/derivatives.js');
+    const c = cornerFor(1);
+    const s = solveAxle(c, {});
+    expect(s.geometryLeft.camber).toBeCloseTo(s.geometryRight.camber, 9);
+    expect(s.rollCentre[1]).toBeCloseTo(0, 6);
+    expect(s.rollCentre[2] - c.z0).toBeCloseTo(staticValues(c).rollCentreHeight, 4);
+  });
+
+  it('matches the roll sweep roll centre when the body rolls', async () => {
+    const { solveAxle } = await import('../src/results/derivatives.js');
+    const c = cornerFor(1);
+    const [row] = rollSweep(c, defaultParams(), [1.5]);
+    const s = solveAxle(c, { roll: 1.5 });
+    expect(s.rollCentre[1]).toBeCloseTo(row.rollCentre[1], 3);
+    expect(s.rollCentre[2] - c.z0).toBeCloseTo(row.rollCentre[2], 3);
+  });
+});

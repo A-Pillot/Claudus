@@ -41,3 +41,13 @@ describe('SHARK .dat files', () => {
     expect(m.rear?.templateSlot).toBe(1);
   });
 });
+
+describe('new models', () => {
+  it('builds a model from template defaults that writes and reads back', async () => {
+    const { newModel } = await import('../src/model/new.js');
+    const m = newModel(14);
+    expect(m.front?.points).toHaveLength(16);
+    expect(m.rear).toBeUndefined();
+    expect(readDat(writeDat(m))).toEqual(m);
+  });
+});
