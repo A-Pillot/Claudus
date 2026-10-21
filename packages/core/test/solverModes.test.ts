@@ -11,6 +11,7 @@ import { addEndFromModel } from '../src/model/coordSets.js';
 import { newModel } from '../src/model/new.js';
 import { complianceAt } from '../src/compliance/apply.js';
 import { defaultCompliance, defaultEndCompliance, defaultBush } from '../src/compliance/types.js';
+import type { Model } from '../src/model/types.js';
 import { sampleModel } from './helpers.js';
 
 const type1 = () => sampleModel('type1.dat');
@@ -173,14 +174,14 @@ describe('wheelbase and ground plane differences', () => {
     expect(a.params.wheelbase).toBeCloseTo(2000, 6);
     const b = addEndFromModel(front, rear, { wheelbase: 'move', ground: 'translate' }).model;
     expect(b.params.wheelbase).toBe(front.params.wheelbase);
-    const wcx = (mm: typeof a, e: 'front' | 'rear') => { const c = new Corner(mm[e]!, e); return c.mech.staticPoints[c.mech.wheels[0].wc][0]; };
+    const wcx = (mm: Model, e: 'front' | 'rear') => { const c = new Corner(mm[e]!, e); return c.mech.staticPoints[c.mech.wheels[0].wc][0]; };
     expect(wcx(b, 'front') - wcx(b, 'rear')).toBeCloseTo(b.params.wheelbase, 6);
   });
 
   it('matches the ground planes by translation or by bump', () => {
     const { front, rear } = both();
     const merged = { ...front, rear: rear.rear };
-    const z0 = (mm: typeof merged, e: 'front' | 'rear') => new Corner(mm[e]!, e).z0;
+    const z0 = (mm: Model, e: 'front' | 'rear') => new Corner(mm[e]!, e).z0;
     expect(z0(merged, 'rear') - z0(merged, 'front')).toBeCloseTo(5, 6);
     const t = fitAddedEnd(merged, 'rear', { wheelbase: 'parameter', ground: 'translate' });
     expect(z0(t, 'rear')).toBeCloseTo(z0(t, 'front'), 6);

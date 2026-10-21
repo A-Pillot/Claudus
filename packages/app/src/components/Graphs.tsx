@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
-import { deviation, leftRows, lineFromData, lineKey, measureColumns, unitFactor, unitText, type End, type EndAnalysis, type Side, type Sweep, type UserLine } from '@claudus/core';
+import { deviation, spread, leftRows, lineFromData, lineKey, measureColumns, unitFactor, unitText, type End, type EndAnalysis, type ToleranceAnalysis, type Side, type Sweep, type UserLine } from '@claudus/core';
 import { useApp } from '../store';
 import { useLab } from '../lab';
 import { defaultOptions, defaultStyle, drawMarker, GraphStyleDialog, type GraphOptions, type Marker } from './GraphOptions';
@@ -103,7 +103,7 @@ const DEFAULTS: { mode: Mode; key: string }[] = [
   { mode: 'steer', key: 'ackermann' },
 ];
 
-export function Graphs({ results }: { results?: EndAnalysis[] }) {
+export function Graphs({ results, tolerance }: { results?: EndAnalysis[]; tolerance?: ToleranceAnalysis }) {
   const [charts, setCharts] = useState(DEFAULTS);
   return (
     <div className="graphs">
@@ -111,6 +111,7 @@ export function Graphs({ results }: { results?: EndAnalysis[] }) {
         <GraphCard
           key={i}
           results={results}
+          tolerance={tolerance}
           mode={c.mode}
           varKey={c.key}
           onChange={(mode, key) => setCharts(charts.map((cc, j) => (j === i ? { mode, key } : cc)))}
@@ -140,10 +141,12 @@ const fixed = (v: number | undefined, f = 1) => (v === undefined ? '–' : (v * 
 /** Per-series drawing info that uPlot's own series options do not cover. */
 interface ColMeta { marker: Marker; colour: string; size: number; grad: boolean }
 
-function GraphCard({ results, mode, varKey, onChange }: { results?: EndAnalysis[]; mode: Mode; varKey: string; onChange: (m: Mode, k: string) => void }) {
+function GraphCard({ results, tolerance, mode, varKey, onChange }: { results?: EndAnalysis[]; tolerance?: ToleranceAnalysis; mode: Mode; varKey: string; onChange: (m: Mode, k: string) => void }) {
   const base = VARIABLES[mode];
   const extra = useMemo(() => measureVars(results), [results]);
-  const def = useMemo(() => ({ x: base.x, ys: [...base.ys, ...extra] }), [base, extra]);
+  // A steering box turns an arm, so steering travel is an angle.
+  const boxSteer = mode === 'steer' && !!results?.some((r) => r.corner.options.steerAxis);
+  const def = useMemo(() => ({ x: boxSteer ? { ...base.x, label: 'Steering arm angle', unit: 'deg' } : base.x, ys: [...base.ys, ...extra] }), [base, extra, boxSteer]);
   const y = def.ys.find((v) => v.key === varKey) ?? def.ys[0];
   const art = useApp((s) => s.art);
   const units = useUnitSettings();
@@ -199,6 +202,16 @@ function GraphCard({ results, mode, varKey, onChange }: { results?: EndAnalysis[
           });
         }
       });
+    // Spread of the tolerance analysis: the lowest and highest value over the 27 positions.
+    if (tolerance && ends.some((e) => e.end === tolerance.end)) {
+      const sp = spread(tolerance, mode as 'bump', (r) => def.x.get(r), (r) => y.get(r));
+      for (const [which, label] of [['min', 'Tolerance min'], ['max', 'Tolerance max']] as const)
+        cols.push({
+          s: { label, stroke: '#ff9d4d', width: 1.5, dash: [2, 3], spanGaps: true, points: { show: false } },
+          meta: { marker: 'none', colour: '#ff9d4d', size: 3, grad: false },
+          m: new Map(sp.map((r) => [r.x * fx, r[which] * fy] as [number, number | null])),
+        });
+    }
     if (vis.userLine)
       for (const e of ends)
         for (const side of sides) {
@@ -226,7 +239,7 @@ function GraphCard({ results, mode, varKey, onChange }: { results?: EndAnalysis[
       metas: cols.map((c) => c.meta),
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ends, y, def, userLines, scope, vis.scope, vis.userLine, vis.left, mode, opts.style, fx, fy]);
+  }, [ends, y, def, userLines, scope, vis.scope, vis.userLine, vis.left, mode, opts.style, fx, fy, tolerance]);
 
   const devs = useMemo(() => mode === 'combined' ? [] : ends.flatMap((e) => sides.map((side) => {
     const l = lineFor(e.end, side);
