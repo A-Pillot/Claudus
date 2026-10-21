@@ -74,10 +74,11 @@ export function parseCompliance(lines: string[], order: PointOrder, into: Compli
 const f = (v: number) => {
   if (v === 0) return '0.000000E+00'.padStart(16);
   const a = Math.abs(v);
-  const s = a >= 0.1 && a < 1e6 ? v.toPrecision(6) : v.toExponential(6).toUpperCase().replace(/E([+-])(\d)$/, 'E$10$2');
-  return s.padStart(16);
+  // Ten significant digits, so values typed into Claudus survive a save and reload.
+  const s = a >= 0.1 && a < 1e6 ? v.toPrecision(10) : v.toExponential(9).toUpperCase().replace(/E([+-])(\d)$/, 'E$10$2');
+  return ' ' + s.padStart(15);
 };
-const int = (v: number) => String(Math.round(v)).padStart(12);
+const int = (v: number) => ' ' + String(Math.round(v)).padStart(11);
 
 /** Write SHARK's COMPLIANCE section body. `positions` gives each end's current points by number. */
 export function complianceLines(data: ComplianceData, order: PointOrder, positions: { front?: Map<number, Vec3>; rear?: Map<number, Vec3> }): string[] {

@@ -119,7 +119,11 @@ export function formatCoord(v: number): string {
 /** Rewrite the three numbers of each row in place; everything else in the file stays as it was. */
 export function rewriteRows(text: string, edits: { row: HpRow; value: [number, number, number] }[]): string {
   const lines = text.split(/(\r?\n)/); // keeps the line endings as odd entries
+  const done = new Set<number>();
   for (const { row, value } of edits) {
+    // The spans describe the original line, so a line is rewritten once only.
+    if (done.has(row.line)) continue;
+    done.add(row.line);
     const i = row.line * 2;
     let s = lines[i];
     // Replace from the last number backwards so earlier spans stay valid.

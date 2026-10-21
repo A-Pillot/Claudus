@@ -122,6 +122,16 @@ describe('compliance in model files', () => {
     expect(back.front!.bushes[2].zAxis).toEqual(c.front!.bushes[2].zAxis);
   });
 
+  it('keeps more than six significant digits of edited values', () => {
+    const m = readDat(sample('Tutorial3.dat'));
+    const c = structuredClone(m.compliance!);
+    c.front!.springs[0].rate = 41.55555;
+    c.front!.bushes[0].stiffness[0] = 1234.5678;
+    const back = readDat(writeDat({ ...m, compliance: c })).compliance!;
+    expect(back.front!.springs[0].rate).toBe(41.55555);
+    expect(back.front!.bushes[0].stiffness[0]).toBe(1234.5678);
+  });
+
   it('adds compliance to a model that had none', () => {
     const m = newModel(1);
     const c = defaultCompliance();

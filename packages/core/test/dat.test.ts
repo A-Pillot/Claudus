@@ -52,3 +52,13 @@ describe('new models', () => {
     expect(readDat(writeDat(m))).toEqual(m);
   });
 });
+
+describe('long numbers', () => {
+  it('never run into each other', () => {
+    const m = readDat(sample('type1.dat'));
+    m.params = { ...m.params, bumpTravel: 60.00000000000001, reboundTravel: 60.00000000000001, bumpIncrement: 0.1 + 0.2 };
+    const back = readDat(writeDat(m));
+    expect(back.params.bumpTravel).toBe(60.00000000000001);
+    expect(back.params.bumpIncrement).toBe(0.1 + 0.2);
+  });
+});
