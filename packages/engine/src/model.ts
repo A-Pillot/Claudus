@@ -170,6 +170,10 @@ export interface TestPoint {
   tolerance: number;
   /** Throttle positions keyed by throttle id; missing = model value. */
   throttle?: Record<number, number>;
+  /** Boundary conditions per inlet / exit boundary (pressure bar abs, temperature K), in element order. */
+  boundary?: { inlets: { pressure: number; temperature: number }[]; exits: { pressure: number }[] };
+  /** Ambient specific humidity (kg/kg) as stored in the .sim file. */
+  humidity?: number;
   extra?: number[];
 }
 
@@ -206,4 +210,6 @@ export interface EngineModel {
   layout: Record<string, { x: number; y: number }>;
   /** Raw .sim sections kept for round-trip of anything not modelled above, keyed by section keyword. */
   raw?: Record<string, string[]>;
+  /** Section keyword order of the parsed file (for writeSim). */
+  rawOrder?: string[];
 }

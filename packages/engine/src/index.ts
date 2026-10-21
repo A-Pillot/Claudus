@@ -6,3 +6,4 @@ export * from './thermo/index';
 export * from './pipes/index';
 export * from './solver/index';
 export * from './tools/index';
+export * from './report';

@@ -65,6 +65,8 @@ export interface TestPointResult {
     plenums: PlenumTrace[];
   };
   warnings: string[];
+  /** Optional full pipe profiles (pressure bar, velocity m/s, temperature K) per crank angle sample, for the pipe display. */
+  profiles?: { angle: number[]; pipes: { id: number; x: number[]; p: number[][]; u: number[][]; T: number[][] }[] };
 }
 
 export interface SweepResult {

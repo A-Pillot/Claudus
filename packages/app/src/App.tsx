@@ -25,6 +25,8 @@ import { MassDialog } from './components/MassDialog';
 import { ListingDialogs } from './components/Listings';
 import { TwoDApp } from './twod/TwoDApp';
 import { useTwoD } from './twod/store2d';
+import { EngineApp } from './engine/EngineApp';
+import { useEngine } from './engine/store';
 
 type SideTab = 'points' | 'params' | 'groups';
 type BottomTab = 'graphs' | 'sdf';
@@ -48,6 +50,8 @@ export function App() {
   const [bottom, setBottom] = useState<BottomTab>('graphs');
   const label = corner && selected !== null ? corner.template.points[selected] : undefined;
   const twoD = useTwoD((s) => s.active);
+  const engine = useEngine((s) => s.active);
+  if (engine) return <EngineApp />;
 
   // The 2D module has its own data and screen; the toolbar is shared.
   if (twoD) {

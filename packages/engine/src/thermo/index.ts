@@ -1,2 +1,9 @@
-// thermo module (being built)
-export {};
+export * from './units';
+export * from './gas';
+export * from './kinematics';
+export * from './combustion';
+export * from './heat';
+export * from './valves';
+export * from './volume';
+export * from './friction';
+export * from './scavenging';

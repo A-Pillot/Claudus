@@ -6,6 +6,7 @@ import { files } from '../files';
 import { templatesForModel } from '../templates';
 import { TemplateMenu } from './TemplateMenu';
 import { useTwoD } from '../twod/store2d';
+import { useEngine } from '../engine/store';
 import { GraphicsMenu } from './GraphicsMenu';
 import { TransferMenu } from './TransferMenu';
 import { ComplianceMenus } from './ComplianceMenu';
@@ -80,6 +81,7 @@ export function Toolbar({ analysis }: { analysis: AnalysisState }) {
       <div className="seg" title="Module">
         <button className={!two ? 'on' : ''} onClick={() => two2.deactivate()} data-testid="module-3d">3D</button>
         <button className={two ? 'on' : ''} onClick={() => two2.activate()} data-testid="module-2d">2D</button>
+        <button onClick={() => useEngine.getState().setActive(true)} data-testid="module-engine">Engine</button>
       </div>
       {!two && (
         <div className="seg">
