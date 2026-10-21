@@ -61,7 +61,7 @@ export function Plot({ series, xLabel, yLabel, logX, logY, xy, yRange, xRange, h
       }
       return [x, y];
     };
-    const data: uPlot.AlignedData = [null, ...series.flatMap((s) => clean(s))] as unknown as uPlot.AlignedData;
+    const data: uPlot.AlignedData = [null, ...series.map((s) => clean(s))] as unknown as uPlot.AlignedData;
     const paths = (u: uPlot, si: number) => {
       const d = u.data[si] as unknown as [number[], number[]];
       const p = new Path2D();

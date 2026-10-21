@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Pipe1D, meshCells, type NodeBoundary } from '../src/pipes';
+import { Pipe1D, meshCells, bendLossCoefficient, junctionLossArea, pressureLossJunction, type NodeBoundary } from '../src/pipes';
 
 const G = 1.4, R = 287;
 const closed: NodeBoundary = { p0: 1e5, T0: 300, gamma: G, R, burnt: 0, effArea: 0 };
@@ -189,5 +189,37 @@ describe('pipes', () => {
     expect(maxRel).toBeLessThan(1e-9);
     // energy: friction conserves total energy, so content change equals the enthalpy flux
     expect(Math.abs(p.totalEnergy() - E0 - dE) / E0).toBeLessThan(1e-8);
+  });
+
+  it('bend loss reduces steady flow and keeps energy conservation', () => {
+    const steady = (K: number) => {
+      const p = new Pipe1D({ length: 0.5, diameterAt: () => 0.04, cellLength: 0.01, gamma: G, R, wallTemperature: 300, frictionFactor: 0.004, bendLossK: K, initial: { p: 1.1e5, T: 300 } });
+      const e1 = amb(1.3e5, 300, 1), e2 = amb(1e5, 300, 1);
+      run(p, 0.3, e1, e2);
+      let m = 0, T = 0;
+      run(p, 0.1, e1, e2, (f, dt) => { m += f.end1.mdot * dt; T += dt; });
+      return m / T;
+    };
+    expect(steady(2)).toBeLessThan(0.9 * steady(0));
+    expect(bendLossCoefficient(90, 1)).toBeCloseTo(0.21, 2);
+    expect(bendLossCoefficient(45, 1)).toBeLessThan(bendLossCoefficient(90, 1));
+    expect(bendLossCoefficient(180, 1)).toBeGreaterThan(bendLossCoefficient(90, 1));
+  });
+
+  it('pressure-loss junction helper', () => {
+    const A = 1e-3;
+    const j = pressureLossJunction([
+      { area: A, angleDeg: 0, mdotIn: 0.1 },
+      { area: A, angleDeg: 90, mdotIn: -0.05 },
+      { area: A, angleDeg: 0, mdotIn: -0.05 },
+    ]);
+    expect(j.datum).toBe(0);
+    expect(j.K[0]).toBe(0);
+    expect(j.K[1]).toBeGreaterThan(j.K[2]); // turning branch loses more
+    expect(j.effAreaFactor[1]).toBeLessThan(j.effAreaFactor[2]);
+    expect(junctionLossArea(A, 0)).toBe(A);
+    expect(junctionLossArea(A, 3)).toBeCloseTo(A / 2, 12);
+    const none = pressureLossJunction([{ area: A, angleDeg: 0, mdotIn: 0 }, { area: A, angleDeg: 90, mdotIn: 0 }]);
+    expect(none.effAreaFactor).toEqual([1, 1]);
   });
 });
