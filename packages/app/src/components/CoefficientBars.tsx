@@ -191,7 +191,7 @@ function BarFields({ bar, onChange, inline }: { bar: CoefficientBar; onChange: (
   const field = (label: string, value: number | undefined, key: 'limit' | 'scale' | 'weight') => (
     <label className={inline ? 'barfield' : 'menurow'}>
       <span>{label}</span>
-      <NumberCell value={value ?? NaN} digits={4} onCommit={(v) => onChange({ [key]: v })} />
+      <NumberCell value={value ?? NaN} digits={4} placeholder={key === 'limit' ? 'none' : key === 'scale' ? 'auto' : undefined} onCommit={(v) => onChange({ [key]: v })} />
       {key !== 'weight' && value !== undefined && <button title={key === 'limit' ? 'No limit' : 'Automatic scale'} onClick={() => onChange({ [key]: undefined })}>✕</button>}
     </label>
   );

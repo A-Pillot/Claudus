@@ -365,3 +365,5 @@ table.grid tr.st-undefined td, table.grid tr.st-derived td { opacity: 0.75; }
 .graphhead { align-items: center; }
 .graphhead select { min-width: 0; flex: 1 1 auto; }
 .graphhead .icon { margin-left: 0; flex: none; }
+.graphhead select:first-child { flex: 0 0 auto; }
+.menulist .menurow .numcell, .barfield .numcell { border-color: var(--line); }

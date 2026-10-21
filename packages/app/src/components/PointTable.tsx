@@ -9,7 +9,7 @@ import { unitText, useUnitSettings } from '../units';
  * default-unit string such as 'mm' or 'N/mm') the value is shown and typed in the display units and committed back
  * in the default units.
  */
-export function NumberCell({ value, onCommit, digits = 3, unit }: { value: number; onCommit: (v: number) => void; digits?: number; unit?: string }) {
+export function NumberCell({ value, onCommit, digits = 3, unit, placeholder }: { value: number; onCommit: (v: number) => void; digits?: number; unit?: string; placeholder?: string }) {
   useUnitSettings();
   const d = unit ? unitDecimalsFor(unit, digits) : digits;
   const shown = Number.isFinite(value) ? String(Number((unit ? toDisplayUnit(unit, value) : value).toFixed(d))) : '';
@@ -26,6 +26,7 @@ export function NumberCell({ value, onCommit, digits = 3, unit }: { value: numbe
   return (
     <input
       className="numcell"
+      placeholder={placeholder}
       value={text}
       inputMode="decimal"
       onFocus={(e) => { setEditing(true); e.target.select(); }}
