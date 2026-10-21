@@ -233,6 +233,14 @@ export function buildCompliance(c: Corner, st: CornerState, data: EndCompliance,
     if (!bush && fixedSide(p.part1) && fixedSide(p.part2)) kr = [rot, rot, rot];
     // SHARK holds a rigid axle's centre revolute with a stiff rotational bush.
     if (hasGen(p, GenType.RigidAxleRevolute)) kr = [s.rigidRotation * perDeg, s.rigidRotation * perDeg, s.rigidRotation * perDeg];
+    // A twist beam's centre joint is the beam itself: stiff in bending, twisting about the shear axis (the
+    // line through the shear points) at the end's roll bar rate.
+    if (!bush && hasGen(p, GenType.ShearPoint) && !fixedSide(p.part1) && !fixedSide(p.part2)) {
+      const shear = t.points.map((q, k) => (hasGen(q, GenType.ShearPoint) && q.no !== p.no ? pts[k] : undefined)).filter((q): q is Vec3 => !!q);
+      const dir = shear.length >= 2 ? normalize(sub(shear[1], shear[0])) : ([0, 1, 0] as Vec3);
+      R = bushAxes(at, add(at, dir));
+      kr = [rot, rot, data.rollBarRate * perDeg];
+    }
     elements.push({ a: body(p.part1), b: body(p.part2), at, R, kt, kr, point: p.no, bushed: !!bush, report: !p.dummy, loss: bush ? bush.lossAngle ?? s.lossAngle : undefined });
   });
 
