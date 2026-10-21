@@ -2,19 +2,22 @@ import { useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Html, Line, OrbitControls, GizmoHelper, GizmoViewport } from '@react-three/drei';
 import * as THREE from 'three';
-import { GenType, GROUND, findGen, mirrorY, type AxleState, type Corner, type Vec3 } from '@claudus/core';
+import { GenType, GROUND, findGen, mirrorY, type AxleState, type ComplianceResult, type Corner, type Vec3 } from '@claudus/core';
 import { useApp } from '../store';
 import { pickPoint } from '../graphicsActions';
 import { GraphicElements } from './GraphicShapes';
+import { ComplianceScene } from './ComplianceScene';
 
 const MM = 0.001; // scene units are metres
 
 interface Props {
   corner: Corner;
   state: AxleState;
+  /** Present in compliant mode: joint results for the right-hand corner. */
+  detail?: ComplianceResult;
 }
 
-export function Viewer3D({ corner, state }: Props) {
+export function Viewer3D({ corner, state, detail }: Props) {
   const view = useApp((s) => s.view);
   const wc = corner.mech.staticPoints[corner.mech.wheelCentre];
   // Centre the scene on the axle so the camera orbits around the car's centreline at this end.
@@ -31,6 +34,7 @@ export function Viewer3D({ corner, state }: Props) {
       <group position={[-origin[0] * MM, 0, -origin[2] * MM]} scale={MM}>
         <Side corner={corner} points={state.right.points} mirrored={false} />
         {/* A corner model's left side is drawn as the mirror image; a full-axle template already has both. */}
+        {detail && <ComplianceScene corner={corner} points={state.right.points} detail={detail} />}
         {state.leftMirror && view.bothSides && <Side corner={corner} points={state.leftMirror.points.map(mirrorY)} mirrored />}
         <Ground z={state.right.groundZ} x={wc[0]} />
         <RollCentre rc={state.rollCentre} />

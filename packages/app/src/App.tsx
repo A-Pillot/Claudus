@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useAnalysis, useAxleState, useCorner } from './derived';
+import { useAnalysis, useAxleState, useComplianceDetail, useCorner } from './derived';
 import { useApp } from './store';
 import { Toolbar } from './components/Toolbar';
 import { PointTable } from './components/PointTable';
@@ -12,6 +12,7 @@ import { AddBanner } from './components/GraphicsMenu';
 import { GroupsPanel } from './components/GroupsPanel';
 import { SdfView } from './components/SdfView';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { ComplianceDialogs } from './components/ComplianceDialogs';
 import { TwoDApp } from './twod/TwoDApp';
 import { useTwoD } from './twod/store2d';
 
@@ -22,6 +23,8 @@ export function App() {
   const { corner, error } = useCorner();
   const state = useAxleState(corner);
   const analysis = useAnalysis();
+  const compliant = useApp((s) => s.compliant);
+  const detail = useComplianceDetail(corner);
   const selected = useApp((s) => s.selected);
   const revision = useApp((s) => s.revision);
   const [side, setSide] = useState<SideTab>('points');
@@ -49,8 +52,9 @@ export function App() {
       <main className="view">
         {corner && state ? (
           <>
-            <ErrorBoundary resetKey={revision}><Viewer3D corner={corner} state={state} /></ErrorBoundary>
+            <ErrorBoundary resetKey={revision}><Viewer3D corner={corner} state={state} detail={detail} /></ErrorBoundary>
             <AddBanner />
+            {compliant && <div className="overlay badge">Compliant solution</div>}
             {label && <div className="overlay">Point {label.no}: {label.label}</div>}
             {!state.right.converged && <div className="overlay warn">The suspension cannot reach this position.</div>}
           </>
@@ -73,6 +77,7 @@ export function App() {
           </ErrorBoundary>
         </div>
       </section>
+      <ComplianceDialogs corner={corner} state={state} detail={detail} />
     </div>
   );
 }

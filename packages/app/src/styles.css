@@ -239,3 +239,37 @@ table.grid tr.st-undefined td, table.grid tr.st-derived td { opacity: 0.75; }
 .gitem.row { flex-direction: row; align-items: center; }
 .gpoints label { display: flex; align-items: center; gap: 6px; }
 .gpoints input { margin: 0; }
+
+/* compliance */
+.overlay.badge { left: auto; right: 12px; color: #f28e2b; }
+.modal.float { background: transparent; pointer-events: none; place-items: end start; }
+.modal.float .dialog { pointer-events: auto; margin: 0 0 16px 16px; width: 400px; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+.dialog.compl .tblwrap { overflow: auto; max-height: 46vh; border: 1px solid var(--line); border-radius: 5px; }
+.dialog.compl.wide { overflow: auto; }
+.ctable { border-collapse: collapse; width: 100%; }
+.ctable th, .ctable td { padding: 2px 6px; text-align: left; white-space: nowrap; }
+.ctable th { position: sticky; top: 0; background: var(--panel2); color: var(--muted); font-weight: 500; }
+.ctable td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.ctable td.no { color: var(--muted); }
+.ctable tr.sel { background: #23415f; }
+.ctable .numcell { width: 72px; }
+.ctable .textcell { width: 120px; }
+.dialog.compl .vlabel.short { width: 110px; }
+.dialog.compl .vlabel.wide { width: 240px; }
+.dialog.compl fieldset { border: 1px solid var(--line); border-radius: 5px; display: flex; flex-direction: column; gap: 6px; }
+.dialog.compl .check { display: flex; align-items: center; gap: 6px; color: var(--text); }
+.bushdetail { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 5px; }
+.live-line { font-variant-numeric: tabular-nums; color: var(--sel); }
+.forcesgrid { display: grid; grid-template-columns: 260px 1fr; gap: 12px; min-height: 0; }
+.setlist { display: flex; flex-direction: column; gap: 4px; }
+.setrow { display: flex; align-items: center; gap: 6px; padding: 2px 4px; border-radius: 4px; cursor: pointer; }
+.setrow.sel { background: #23415f; }
+.setrow input:not([type]) , .setrow input[type='text'] { flex: 1; min-width: 0; }
+.coefgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 8px; max-height: 62vh; overflow: auto; }
+.coefchart { border: 2px solid var(--line); border-radius: 6px; padding: 4px 6px; cursor: pointer; }
+.coefchart.picked { background: var(--panel2); }
+.coefchart.active { border-color: #e15759; }
+.coefchart.off { opacity: 0.7; }
+.coeftitle { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.coefbar { flex-wrap: wrap; }
+.ctxmenu { min-width: 260px; }
