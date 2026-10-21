@@ -18,7 +18,7 @@ export function forcesFor(data: ComplianceData, end: End, set = data.activeSet):
 
 /** Solve the compliant deflection at one kinematic state with a chosen force set. */
 export function complianceAt(c: Corner, st: CornerState, data: ComplianceData, set = data.activeSet): ComplianceResult {
-  return solveCompliance(c, st, endCompliance(data, c.end), { settings: data.settings, forces: forcesFor(data, c.end, set) });
+  return solveCompliance(c, st, endCompliance(data, c.end), { settings: data.settings, forces: forcesFor(data, c.end, set), rollBar: data.switches?.rollBar, bushPreload: data.switches?.bushPreload });
 }
 
 /** Make every solve of this corner compliant, so all derivatives come from the deformed geometry. */

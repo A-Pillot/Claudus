@@ -2,8 +2,9 @@ import { useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Html, Line, OrbitControls, GizmoHelper, GizmoViewport } from '@react-three/drei';
 import * as THREE from 'three';
-import { GenType, GROUND, findGen, mirrorY, type AxleState, type FreeBody, type ComplianceResult, type Corner, type Vec3 } from '@claudus/core';
+import { boxPositions, limitOf, GenType, GROUND, findGen, mirrorY, type AxleState, type FreeBody, type ComplianceResult, type Corner, type Vec3 } from '@claudus/core';
 import { useApp } from '../store';
+import { useModes } from '../modes';
 import { pickPoint } from '../graphicsActions';
 import { fmtUnit, useUnitSettings } from '../units';
 import { registerCanvas } from '../video';
@@ -57,6 +58,7 @@ export function Viewer3D({ corner, state, detail, ghosts, freeBody }: Props) {
         ))}
           </>
         )}
+        <LimitBoxes />
         <Ground z={state.right.groundZ} x={wc[0]} />
         <RollCentre rc={state.rollCentre} />
         {view.triad && <axesHelper args={[300]} />}
@@ -182,5 +184,50 @@ function RollCentre({ rc }: { rc: Vec3 }) {
       <sphereGeometry args={[12, 16, 12]} />
       <meshStandardMaterial color="#e15759" emissive="#7a1f20" />
     </mesh>
+  );
+}
+
+/** Point limit boxes of the end being shown (Graphics / Point Limits), and the tolerance analysis positions. */
+function LimitBoxes() {
+  const model = useApp((s) => s.model);
+  const end = useApp((s) => s.end);
+  const visible = useModes((s) => s.limitsVisible);
+  const use = useModes((s) => s.limitsUse);
+  const tolOn = useModes((s) => s.tolOn);
+  const tol = useModes((s) => s.tolPoint);
+  const data = model[end];
+  const geometry = useMemo(() => {
+    if (!visible || !data) return null;
+    const v: number[] = [];
+    data.points.forEach((_, i) => {
+      const { min, max } = limitOf(model, end, i);
+      const c = (x: number, y: number, z: number) => [x ? max[0] : min[0], y ? max[1] : min[1], z ? max[2] : min[2]];
+      // 12 edges: along each axis from each of the four corners of the other two.
+      for (const [a, b] of [[0, 0], [0, 1], [1, 0], [1, 1]]) {
+        v.push(...(c(0, a, b)), ...(c(1, a, b)), ...(c(a, 0, b)), ...(c(a, 1, b)), ...(c(a, b, 0)), ...(c(a, b, 1)));
+      }
+    });
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
+    return g;
+  }, [visible, model, end, data]);
+  const dots = useMemo(() => {
+    if (!tolOn || !tol || tol.end !== end || !data?.points[tol.index]) return [];
+    return boxPositions(limitOf(model, end, tol.index), data.points[tol.index]);
+  }, [tolOn, tol, model, end, data]);
+  return (
+    <>
+      {geometry && (
+        <lineSegments geometry={geometry}>
+          <lineBasicMaterial color={use ? '#ff9d4d' : '#6b7686'} />
+        </lineSegments>
+      )}
+      {dots.map((p, i) => (
+        <mesh key={i} position={p}>
+          <sphereGeometry args={[3, 8, 6]} />
+          <meshBasicMaterial color="#ff9d4d" />
+        </mesh>
+      ))}
+    </>
   );
 }

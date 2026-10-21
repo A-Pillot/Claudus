@@ -1,23 +1,43 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
-import { deviation, leftRows, lineFromData, lineKey, measureColumns, SWEEP_VARIABLES, unitFactor, unitText, valueOf, type End, type EndAnalysis, type Side, type ResultVar, type Sweep, type UserLine } from '@claudus/core';
+import { deviation, spread, leftRows, lineFromData, lineKey, measureColumns, SWEEP_VARIABLES, unitFactor, unitText, valueOf, type End, type EndAnalysis, type ToleranceAnalysis, type Side, type ResultVar, type Sweep, type UserLine } from '@claudus/core';
 import { useApp } from '../store';
 import { useLab } from '../lab';
 import { defaultOptions, defaultStyle, drawMarker, GraphStyleDialog, type GraphOptions, type Marker } from './GraphOptions';
 import { useUnitSettings } from '../units';
 
-type Mode = 'bump' | 'roll' | 'steer';
+type Mode = 'bump' | 'roll' | 'steer' | 'combined';
 
 interface VarDef { key: string; label: string; unit: string; get: (row: any) => number }
 
 const asVar = (v: ResultVar): VarDef => ({ key: v.key, label: v.label, unit: v.unit, get: (r) => valueOf(r, v.key) });
+
+const g = (key: string) => (r: any) => r[key] as number;
+/** The combined motion path (not one of the shared sweeps): variables read straight from its rows. */
+const COMBINED_VARS = {
+  x: { key: 'step', label: 'Combined motion step', unit: '', get: g('step') },
+  ys: [
+    { key: 'bump', label: 'Bump travel', unit: 'mm', get: g('bump') },
+    { key: 'rack', label: 'Rack travel', unit: 'mm', get: g('rack') },
+    { key: 'camber', label: 'Camber angle', unit: 'deg', get: g('camber') },
+    { key: 'toeSae', label: 'Toe angle (SAE)', unit: 'deg', get: g('toeSae') },
+    { key: 'toeChange', label: 'Toe change', unit: 'deg', get: g('toeChange') },
+    { key: 'castor', label: 'Castor angle', unit: 'deg', get: g('castor') },
+    { key: 'kingpin', label: 'Kingpin angle', unit: 'deg', get: g('kingpin') },
+    { key: 'halfTrackChange', label: 'Half track change', unit: 'mm', get: g('halfTrackChange') },
+    { key: 'wheelbaseChange', label: 'Wheelbase change', unit: 'mm', get: g('wheelbaseChange') },
+    { key: 'damperTravel', label: 'Damper travel', unit: 'mm', get: g('damperTravel') },
+    { key: 'springTravel', label: 'Spring travel', unit: 'mm', get: g('springTravel') },
+  ] as VarDef[],
+};
 
 // The variable lists live in core, shared with the SDF and spline listings.
 export const VARIABLES: Record<Mode, { x: VarDef; ys: VarDef[] }> = {
   bump: { x: asVar(SWEEP_VARIABLES.bump.x), ys: SWEEP_VARIABLES.bump.ys.map(asVar) },
   roll: { x: asVar(SWEEP_VARIABLES.roll.x), ys: SWEEP_VARIABLES.roll.ys.map(asVar) },
   steer: { x: asVar(SWEEP_VARIABLES.steer.x), ys: SWEEP_VARIABLES.steer.ys.map(asVar) },
+  combined: COMBINED_VARS,
 };
 
 /** The plottable results of the measurement elements (distance, components, angle) of every end's template. */
@@ -36,7 +56,7 @@ const DEFAULTS: { mode: Mode; key: string }[] = [
   { mode: 'steer', key: 'ackermann' },
 ];
 
-export function Graphs({ results }: { results?: EndAnalysis[] }) {
+export function Graphs({ results, tolerance }: { results?: EndAnalysis[]; tolerance?: ToleranceAnalysis }) {
   const [charts, setCharts] = useState(DEFAULTS);
   return (
     <div className="graphs">
@@ -44,6 +64,7 @@ export function Graphs({ results }: { results?: EndAnalysis[] }) {
         <GraphCard
           key={i}
           results={results}
+          tolerance={tolerance}
           mode={c.mode}
           varKey={c.key}
           onChange={(mode, key) => setCharts(charts.map((cc, j) => (j === i ? { mode, key } : cc)))}
@@ -58,7 +79,7 @@ export function allLines(results: EndAnalysis[] | undefined, end: End, side: Sid
   const r = results?.find((e) => e.end === end);
   if (!r) return [];
   const out: UserLine[] = [];
-  for (const sweep of ['bump', 'roll', 'steer'] as Mode[])
+  for (const sweep of ['bump', 'roll', 'steer'] as Sweep[])
     for (const v of VARIABLES[sweep].ys) {
       const l = lineFromData(r[sweep], sweep, v.key, end, side);
       if (l.points.length) out.push(l);
@@ -73,16 +94,18 @@ const fixed = (v: number | undefined, f = 1) => (v === undefined ? '–' : (v * 
 /** Per-series drawing info that uPlot's own series options do not cover. */
 interface ColMeta { marker: Marker; colour: string; size: number; grad: boolean }
 
-function GraphCard({ results, mode, varKey, onChange }: { results?: EndAnalysis[]; mode: Mode; varKey: string; onChange: (m: Mode, k: string) => void }) {
+function GraphCard({ results, tolerance, mode, varKey, onChange }: { results?: EndAnalysis[]; tolerance?: ToleranceAnalysis; mode: Mode; varKey: string; onChange: (m: Mode, k: string) => void }) {
   const base = VARIABLES[mode];
   const extra = useMemo(() => measureVars(results), [results]);
-  const def = useMemo(() => ({ x: base.x, ys: [...base.ys, ...extra] }), [base, extra]);
+  // A steering box turns an arm, so steering travel is an angle.
+  const boxSteer = mode === 'steer' && !!results?.some((r) => r.corner.options.steerAxis);
+  const def = useMemo(() => ({ x: boxSteer ? { ...base.x, label: 'Steering arm angle', unit: 'deg' } : base.x, ys: [...base.ys, ...extra] }), [base, extra, boxSteer]);
   const y = def.ys.find((v) => v.key === varKey) ?? def.ys[0];
   const art = useApp((s) => s.art);
   const units = useUnitSettings();
   const fx = unitFactor(def.x.unit, units);
   const fy = unitFactor(y.unit, units);
-  const current = (mode === 'bump' ? art.bump : mode === 'roll' ? art.roll : art.rack) * fx;
+  const current = mode === 'combined' ? NaN : (mode === 'bump' ? art.bump : mode === 'roll' ? art.roll : art.rack) * fx;
   const userLines = useLab((s) => s.userLines);
   const scope = useLab((s) => s.scope);
   const vis = useLab((s) => s.graphVis);
@@ -106,9 +129,9 @@ function GraphCard({ results, mode, varKey, onChange }: { results?: EndAnalysis[
 
   const ends = useMemo(() => (results ?? []).filter((r) => r[mode].length > 0), [results, mode]);
   // Steer results are inner/outer wheel values, so there is no separate left-hand data line for them.
-  const sides: Side[] = vis.left && mode !== 'steer' ? ['right', 'left'] : ['right'];
+  const sides: Side[] = vis.left && mode !== 'steer' && mode !== 'combined' ? ['right', 'left'] : ['right'];
   const idOf = (end: End, side: Side) => ({ end, side, sweep: mode as Sweep, variable: y.key });
-  const lineFor = (end: End, side: Side) => userLines.find((l) => lineKey(l) === lineKey(idOf(end, side)));
+  const lineFor = (end: End, side: Side) => mode === 'combined' ? undefined : userLines.find((l) => lineKey(l) === lineKey(idOf(end, side)));
   const sideName = (side: Side) => (side === 'left' ? ' -Y' : '');
 
   const { data, series, metas } = useMemo(() => {
@@ -132,6 +155,16 @@ function GraphCard({ results, mode, varKey, onChange }: { results?: EndAnalysis[
           });
         }
       });
+    // Spread of the tolerance analysis: the lowest and highest value over the 27 positions.
+    if (tolerance && ends.some((e) => e.end === tolerance.end)) {
+      const sp = spread(tolerance, mode as 'bump', (r) => def.x.get(r), (r) => y.get(r));
+      for (const [which, label] of [['min', 'Tolerance min'], ['max', 'Tolerance max']] as const)
+        cols.push({
+          s: { label, stroke: '#ff9d4d', width: 1.5, dash: [2, 3], spanGaps: true, points: { show: false } },
+          meta: { marker: 'none', colour: '#ff9d4d', size: 3, grad: false },
+          m: new Map(sp.map((r) => [r.x * fx, r[which] * fy] as [number, number | null])),
+        });
+    }
     if (vis.userLine)
       for (const e of ends)
         for (const side of sides) {
@@ -149,7 +182,7 @@ function GraphCard({ results, mode, varKey, onChange }: { results?: EndAnalysis[
         cols.push({
           s: { label: END_NAME[e.end] + sideName(side), stroke: ls.colour, width: 2, dash: side === 'left' ? [8, 4] : undefined, spanGaps: true, points: { show: false } },
           meta: { marker: ls.marker, colour: ls.colour, size: 3, grad: true },
-          m: rowsMap((side === 'left' ? leftRows(e[mode] as any[], mode) : e[mode]) as any[]),
+          m: rowsMap((side === 'left' ? leftRows(e[mode] as any[], mode as Sweep) : e[mode]) as any[]),
         });
       }
     const xs = [...new Set(cols.flatMap((c) => [...c.m.keys()]))].sort((a, b) => a - b);
@@ -159,16 +192,16 @@ function GraphCard({ results, mode, varKey, onChange }: { results?: EndAnalysis[
       metas: cols.map((c) => c.meta),
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ends, y, def, userLines, scope, vis.scope, vis.userLine, vis.left, mode, opts.style, fx, fy]);
+  }, [ends, y, def, userLines, scope, vis.scope, vis.userLine, vis.left, mode, opts.style, fx, fy, tolerance]);
 
-  const devs = useMemo(() => ends.flatMap((e) => sides.map((side) => {
+  const devs = useMemo(() => mode === 'combined' ? [] : ends.flatMap((e) => sides.map((side) => {
     const l = lineFor(e.end, side);
     const snap = scope[devSlot]?.find((x) => x.end === e.end);
     return {
       end: e.end,
       side,
       user: l ? deviation(e[mode] as any[], l) : undefined,
-      scope: snap?.[mode].length ? deviation(e[mode] as any[], lineFromData(snap[mode] as any[], mode, y.key, e.end, side)) : undefined,
+      scope: snap?.[mode].length ? deviation(e[mode] as any[], lineFromData(snap[mode] as any[], mode as Sweep, y.key, e.end, side)) : undefined,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   })), [ends, userLines, scope, devSlot, mode, y, vis.left]);
@@ -176,8 +209,8 @@ function GraphCard({ results, mode, varKey, onChange }: { results?: EndAnalysis[
   const closeMenu = () => setMenu(null);
   const run = (fn: () => void) => () => { fn(); closeMenu(); };
   const title = `${y.label} against ${def.x.label.toLowerCase()}`;
-  const edit = (end: End, side: Side) => lab().setEditLine({ end, side, sweep: mode, variable: y.key, label: `${END_NAME[end]} ${side === 'left' ? '(-Y) ' : ''}${title}`, xUnit: def.x.unit, yUnit: y.unit });
-  const copyData = () => ends.forEach((e) => sides.forEach((side) => lab().setUserLine(lineFromData(e[mode] as any[], mode, y.key, e.end, side))));
+  const edit = (end: End, side: Side) => lab().setEditLine({ end, side, sweep: mode as Sweep, variable: y.key, label: `${END_NAME[end]} ${side === 'left' ? '(-Y) ' : ''}${title}`, xUnit: def.x.unit, yUnit: y.unit });
+  const copyData = () => mode !== 'combined' && ends.forEach((e) => sides.forEach((side) => lab().setUserLine(lineFromData(e[mode] as any[], mode as Sweep, y.key, e.end, side))));
   const store = (slot: number) => results && lab().storeScope(slot, results);
   const hasUser = userLines.some((l) => ends.some((e) => (['right', 'left'] as Side[]).some((side) => lineKey(l) === lineKey(idOf(e.end, side)))));
 
@@ -188,6 +221,7 @@ function GraphCard({ results, mode, varKey, onChange }: { results?: EndAnalysis[
           <option value="bump">Bump</option>
           <option value="roll">Roll</option>
           <option value="steer">Steer</option>
+          <option value="combined">Combined</option>
         </select>
         <select value={y.key} onChange={(e) => { onChange(mode, e.target.value); setView(null); }}>
           {def.ys.map((v) => <option key={v.key} value={v.key}>{v.label}</option>)}
@@ -209,15 +243,15 @@ function GraphCard({ results, mode, varKey, onChange }: { results?: EndAnalysis[
       {data ? (
         <Plot
           data={data} series={series} metas={metas} swap={opts.swap} view={view} onView={setView} showSlope={vis.derivative}
-          xLabel={`${def.x.label} (${unitText(def.x.unit, units)})`} yLabel={y.unit ? `${y.label} (${unitText(y.unit, units)})` : y.label} marker={current}
+          xLabel={def.x.unit ? `${def.x.label} (${unitText(def.x.unit, units)})` : def.x.label} yLabel={y.unit ? `${y.label} (${unitText(y.unit, units)})` : y.label} marker={current}
         />
       ) : (
-        <div className="muted pad">{results ? 'Not applicable to this model.' : 'Calculating…'}</div>
+        <div className="muted pad">{results ? (mode === 'combined' ? 'No combined motion path. Define one with Data / Set / edit combined motion profile (steerable suspensions only).' : 'Not applicable to this model.') : 'Calculating…'}</div>
       )}
       {styling && <GraphStyleDialog options={opts} onChange={setOpts} onClose={() => setStyling(false)} />}
       {menu && (
         <GraphMenu at={menu} onClose={closeMenu}>
-          {ends.flatMap((e) => (['right', 'left'] as Side[]).map((side) => (
+          {ends.flatMap((e) => (mode === 'combined' ? [] : ['right', 'left'] as Side[]).map((side) => (
             <button key={e.end + side} onClick={run(() => edit(e.end, side))}>Edit {END_NAME[e.end].toLowerCase()} ({side === 'left' ? '-Y' : '+Y'}) user line…</button>
           )))}
           <button disabled={!ends.length} onClick={run(copyData)}>Copy data line to user line</button>

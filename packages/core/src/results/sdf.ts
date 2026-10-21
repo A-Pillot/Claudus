@@ -79,6 +79,10 @@ export function formatSdf(m: Model, results: EndAnalysis[], name = ''): string {
     ];
     for (const [k, v] of sv) L.push(`    ${k.padEnd(40)}${f(v)}`);
 
+    if (a.bumpLabels.some((x) => x)) {
+      L.push('', '  EXTENDED BUMP TRAVEL POSITIONS', '');
+      a.bump.forEach((r, i) => L.push(`    ${f(r.bump, 2)}  ${a.bumpLabels[i] ?? ''}`));
+    }
     L.push(...table(`${END} SUSPENSION - BUMP TRAVEL`, [
       { head: ['BUMP', 'TRAVEL', '(mm)'], get: (r) => r.bump, d: 2 },
       { head: ['CAMBER', 'ANGLE', '(deg)'], get: (r) => r.camber },
@@ -132,6 +136,20 @@ export function formatSdf(m: Model, results: EndAnalysis[], name = ''): string {
       ], a.steer));
       L.push(...extraTables(`${END} SUSPENSION - STEER`, 'steer', a.steer));
     }
+    if (a.combined.length)
+      L.push(...table(`${END} SUSPENSION - COMBINED MOTION`, [
+        { head: ['STEP'], get: (r) => r.step, d: 0 },
+        { head: ['BUMP', 'TRAVEL', '(mm)'], get: (r) => r.bump, d: 2 },
+        { head: ['RACK', 'TRAVEL', '(mm)'], get: (r) => r.rack, d: 2 },
+        { head: ['CAMBER', 'ANGLE', '(deg)'], get: (r) => r.camber },
+        { head: ['TOE', 'ANGLE', '(deg)'], get: (r) => r.toeSae },
+        { head: ['CASTOR', 'ANGLE', '(deg)'], get: (r) => r.castor },
+        { head: ['KINGPIN', 'ANGLE', '(deg)'], get: (r) => r.kingpin },
+        { head: ['HALF TRACK', 'CHANGE', '(mm)'], get: (r) => r.halfTrackChange, d: 3 },
+        { head: ['WHEELBASE', 'CHANGE', '(mm)'], get: (r) => r.wheelbaseChange, d: 3 },
+        { head: ['DAMPER', 'TRAVEL', '(mm)'], get: (r) => r.damperTravel, d: 3 },
+        { head: ['SPRING', 'TRAVEL', '(mm)'], get: (r) => r.springTravel, d: 3 },
+      ], a.combined));
   }
   L.push('');
   return L.join('\n');

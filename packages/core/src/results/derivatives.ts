@@ -9,6 +9,9 @@ import type { Model, VehicleParams } from '../model/types.js';
 import { Corner, intersectYZ, type CornerRates, type CornerState } from '../solver/corner.js';
 import { spindleAxis } from '../solver/mechanism.js';
 import { isMeasure, measureValues } from '../graphics/elements.js';
+import { bumpSteps } from '../model/combined.js';
+import { solverOptionsFor, type SolverOptions } from '../solver/options.js';
+import { combinedSweep, type CombinedRow } from './combined.js';
 import { swingArms } from './swingArm.js';
 
 export interface WheelGeometry {
@@ -272,9 +275,9 @@ export function bumpSweep(c: Corner, p: VehicleParams, values = range(-p.rebound
       springRatio: ratio(r.tcp[2], r.springLength),
       antiDive: antiPitch(c, r, p, 'dive'),
       antiSquat: antiPitch(c, r, p, 'squat'),
-      rollCentreToBody: rz - c.z0,
+      rollCentreToBody: rz - st.dz - c.z0,
       rollCentreToGround: rz - st.groundZ,
-      rollCentre: [rx, ry, rz - c.z0],
+      rollCentre: [rx, ry, rz - st.dz - c.z0],
       halfTrackChange: g.tcp[1] - tcp0[1],
       wheelbaseChange: sign * (g.tcp[0] - tcp0[0]),
       damperTravel: c.damperLength(st.points) - d0,
@@ -357,7 +360,7 @@ export function steerSweep(c: Corner, p: VehicleParams, values = range(-p.steerT
       right,
       rollCentre: [rx, ry, rz - c.z0] as Vec3,
       measures: measuresAt(c, st.points),
-      left: c.fullAxle ? wheelGeometry(c, st.points, st.drive.groundZ2 ?? st.groundZ, st, 1) : undefined,
+      left: c.fullAxle ? wheelGeometry(c, st.points, c.groundZ2Of(st), st, 1) : undefined,
     };
   });
   const geo = new Map([...pairs].map(([v, p]) => [v, p.right]));
@@ -429,6 +432,10 @@ export interface EndAnalysis {
   bump: BumpRow[];
   roll: RollRow[];
   steer: SteerRow[];
+  /** The combined bump and steer path, when the model has a profile and the end is steerable. */
+  combined: CombinedRow[];
+  /** Labels of the bump rows when the extended bump list is in use (empty strings otherwise). */
+  bumpLabels: string[];
 }
 
 /** Run the standard SHARK analysis (statics, bump, roll and steer sweeps) for every end of a model. */
@@ -438,6 +445,8 @@ export interface AnalyseOptions {
    * force set, using the model's compliance data (or the defaults when it has none).
    */
   compliant?: boolean;
+  /** Solver settings that are not part of the data file (such as moving ground or moving body). */
+  solver?: Partial<SolverOptions>;
 }
 
 export function analyse(m: Model, opts: AnalyseOptions = {}): EndAnalysis[] {
@@ -445,15 +454,18 @@ export function analyse(m: Model, opts: AnalyseOptions = {}): EndAnalysis[] {
   for (const end of ['front', 'rear'] as const) {
     const data = m[end];
     if (!data) continue;
-    const corner = new Corner(data, end);
+    const corner = new Corner(data, end, undefined, solverOptionsFor(m, opts.solver, end));
+    const bump = bumpSteps(m.params, m.extendedBump);
     if (opts.compliant) makeCompliant(corner, m.compliance ?? defaultCompliance());
     out.push({
       end,
       corner,
       statics: staticValues(corner),
-      bump: bumpSweep(corner, m.params),
+      bump: bumpSweep(corner, m.params, bump.values),
       roll: rollSweep(corner, m.params),
       steer: steerSweep(corner, m.params),
+      combined: m.combined && corner.mech.rackPoint !== undefined ? combinedSweep(corner, m.combined) : [],
+      bumpLabels: bump.labels,
     });
   }
   return out;
@@ -487,7 +499,7 @@ export function solveAxle(c: Corner, a: { bump?: number; roll?: number; rack?: n
     return {
       right,
       geometryRight: wheelGeometry(c, right.points, right.groundZ, right),
-      geometryLeft: wheelGeometry(c, right.points, right.drive.groundZ2 ?? right.groundZ, right, 1),
+      geometryLeft: wheelGeometry(c, right.points, c.groundZ2Of(right), right, 1),
       rollCentre: [(tr[0] + tl[0]) / 2, y, z],
     };
   }
