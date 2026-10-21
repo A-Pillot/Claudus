@@ -1,0 +1,203 @@
+/**
+ * Reader and writer for SHARK 3D model files (.dat).
+ *
+ * The format is plain text in Fortran list-directed style: a section name on its own line, followed by
+ * whitespace-separated numbers. Sections Claudus does not interpret yet are kept verbatim, so a file
+ * read and written back keeps everything SHARK put in it.
+ */
+import type { Vec3 } from '../math/vec3.js';
+import { defaultParams, type Model, type PointGroup, type RawSection, type SuspensionData, type VehicleParams } from '../model/types.js';
+
+export const KNOWN_SECTIONS = [
+  'VERSION', 'PARAMETERS', 'FRONT SUSPENSION', 'REAR SUSPENSION', 'TOLERANCES', 'TITLES', 'TYRE', 'BODY',
+  'FORMULA', 'ROLL SOLUTION', 'GROUPS', 'COMPLIANCE', 'FORCES', 'FSETS', 'RAVEN_DEFAULTS', 'EXTENDED BUMP',
+  'COMBINED', 'USER LINES',
+] as const;
+
+const PARSED = new Set(['VERSION', 'PARAMETERS', 'FRONT SUSPENSION', 'REAR SUSPENSION', 'TOLERANCES', 'TITLES', 'TYRE', 'ROLL SOLUTION', 'GROUPS']);
+
+const nums = (line: string | undefined): number[] =>
+  (line ?? '').trim() === '' ? [] : (line as string).trim().split(/[\s,]+/).map((s) => Number(s.replace(/[dD]/, 'E')));
+
+export class DatParseError extends Error {}
+
+/** Split file text into named sections. */
+export function splitSections(text: string): RawSection[] {
+  const lines = text.replace(/\r/g, '').split('\n');
+  const known = new Set<string>(KNOWN_SECTIONS);
+  const out: RawSection[] = [];
+  let cur: RawSection | undefined;
+  for (const line of lines) {
+    const t = line.trim();
+    if (known.has(t)) {
+      cur = { name: t, lines: [] };
+      out.push(cur);
+    } else if (cur) cur.lines.push(line);
+    else if (t !== '') throw new DatParseError(`Unexpected text before the first section: "${t}"`);
+  }
+  // drop trailing blank lines in each section
+  for (const s of out) while (s.lines.length && s.lines[s.lines.length - 1].trim() === '') s.lines.pop();
+  return out;
+}
+
+function parseParams(lines: string[]): VehicleParams {
+  const p = defaultParams();
+  const l = lines.map(nums);
+  [p.bumpTravel, p.reboundTravel, p.bumpIncrement] = l[0] ?? [];
+  [p.rollAngle, p.rollIncrement] = l[1] ?? [];
+  [p.steerTravel, p.steerIncrement] = l[2] ?? [];
+  [p.wheelbase, p.cogHeight, p.brakeFrontPct, p.driveFrontPct] = l[3] ?? [];
+  [p.weightFrontPct] = l[4] ?? [];
+  const b = l[5] ?? [2, 2, 2, 2];
+  p.frontBrakeType = b[0];
+  p.rearBrakeType = b[1];
+  p.brakeLineExtra = [b[2] ?? 2, b[3] ?? 2];
+  const s = l[6] ?? [1, 1, 1, 1];
+  p.frontSuspensionType = s[0];
+  p.rearSuspensionType = s[1];
+  p.suspLineExtra = [s[2] ?? 1, s[3] ?? 1];
+  for (const [k, v] of Object.entries(p)) if (typeof v === 'number' && !Number.isFinite(v)) throw new DatParseError(`Bad PARAMETERS value for ${k}`);
+  return p;
+}
+
+function parseSuspension(lines: string[]): SuspensionData {
+  const rows = lines.map(nums).filter((r) => r.length > 0);
+  if (rows.length < 2) throw new DatParseError('Suspension section is too short');
+  const templateSlot = rows[0][0];
+  const points: Vec3[] = [];
+  let rollingRadius = NaN;
+  for (const r of rows.slice(1)) {
+    if (r.length >= 3) points.push([r[0], r[1], r[2]]);
+    else {
+      rollingRadius = r[0];
+      break;
+    }
+  }
+  if (!Number.isFinite(rollingRadius)) throw new DatParseError('Suspension section has no rolling radius');
+  return { templateSlot, points, rollingRadius };
+}
+
+function parseGroups(lines: string[]): PointGroup[] {
+  let i = 0;
+  const n = nums(lines[i++])[0] ?? 0;
+  const groups: PointGroup[] = [];
+  for (let g = 0; g < n; g++) {
+    const label = (lines[i++] ?? '').trim();
+    const count = nums(lines[i++])[0] ?? 0;
+    const members = [];
+    for (let k = 0; k < count; k++) {
+      const [point, end] = nums(lines[i++]);
+      members.push({ point, end });
+    }
+    groups.push({ label, members });
+  }
+  return groups;
+}
+
+export function readDat(text: string): Model {
+  const sections = splitSections(text);
+  const get = (name: string) => sections.find((s) => s.name === name);
+  const version = get('VERSION');
+  const params = get('PARAMETERS');
+  if (!version || !params) throw new DatParseError('Not a SHARK 3D data file (missing VERSION or PARAMETERS)');
+  const fr = get('FRONT SUSPENSION');
+  const re = get('REAR SUSPENSION');
+  const titles = get('TITLES');
+  const titleCount = titles ? nums(titles.lines[0])[0] ?? 0 : 0;
+  return {
+    version: nums(version.lines[0]),
+    versionExtra: version.lines.slice(1),
+    params: parseParams(params.lines),
+    front: fr && fr.lines.some((l) => l.trim()) ? parseSuspension(fr.lines) : undefined,
+    rear: re && re.lines.some((l) => l.trim()) ? parseSuspension(re.lines) : undefined,
+    tolerances: get('TOLERANCES')?.lines.flatMap(nums) ?? [],
+    titles: titles ? titles.lines.slice(1, 1 + titleCount) : [],
+    tyreWidths: get('TYRE')?.lines.flatMap(nums) ?? [150, 150, 150, 150],
+    rollSolution: nums(get('ROLL SOLUTION')?.lines[0])[0] ?? 1,
+    groups: get('GROUPS') ? parseGroups(get('GROUPS')!.lines) : [],
+    sectionOrder: sections.map((s) => s.name),
+    raw: sections.filter((s) => !PARSED.has(s.name)),
+  };
+}
+
+// ---- writing -------------------------------------------------------------------------------------
+
+const int = (v: number) => String(Math.round(v)).padStart(13);
+/** Shortest text that reads back to exactly the same number, padded like SHARK's columns. */
+const numText = (v: number) => {
+  if (Number.isInteger(v) && Math.abs(v) < 1e15) return v.toFixed(1);
+  const s = String(v);
+  return s.includes('e') ? v.toExponential().toUpperCase() : s;
+};
+const real = (v: number) => numText(v).padStart(27);
+const realShort = (v: number) => numText(v).padStart(16);
+
+function writeSuspension(s: SuspensionData): string[] {
+  return [int(s.templateSlot), ...s.points.map((p) => p.map(real).join('')), real(s.rollingRadius)];
+}
+
+export function writeDat(m: Model): string {
+  const out: string[] = [];
+  const p = m.params;
+  const order = [...m.sectionOrder];
+  const ensure = (name: string, after: string) => {
+    if (!order.includes(name)) order.splice(order.indexOf(after) + 1, 0, name);
+  };
+  if (!order.includes('VERSION')) order.unshift('VERSION');
+  ensure('PARAMETERS', 'VERSION');
+  if (m.front) ensure('FRONT SUSPENSION', 'PARAMETERS');
+  if (m.rear) ensure('REAR SUSPENSION', m.front ? 'FRONT SUSPENSION' : 'PARAMETERS');
+  for (const name of order) {
+    const body: string[] = [];
+    switch (name) {
+      case 'VERSION':
+        body.push(m.version.map(int).join(''), ...m.versionExtra);
+        break;
+      case 'PARAMETERS':
+        body.push(
+          [p.bumpTravel, p.reboundTravel, p.bumpIncrement].map(realShort).join(''),
+          [p.rollAngle, p.rollIncrement].map(realShort).join(''),
+          [p.steerTravel, p.steerIncrement].map(realShort).join(''),
+          [p.wheelbase, p.cogHeight, p.brakeFrontPct, p.driveFrontPct].map(real).join(''),
+          real(p.weightFrontPct),
+          [p.frontBrakeType, p.rearBrakeType, ...p.brakeLineExtra].map(int).join(''),
+          [p.frontSuspensionType, p.rearSuspensionType, ...p.suspLineExtra].map(int).join(''),
+        );
+        break;
+      case 'FRONT SUSPENSION':
+        if (!m.front) continue;
+        body.push(...writeSuspension(m.front));
+        break;
+      case 'REAR SUSPENSION':
+        if (!m.rear) continue;
+        body.push(...writeSuspension(m.rear));
+        break;
+      case 'TOLERANCES':
+        body.push(m.tolerances.map(real).join(''));
+        break;
+      case 'TITLES':
+        body.push(int(m.titles.length), ...m.titles);
+        break;
+      case 'TYRE':
+        body.push(m.tyreWidths.map(real).join(''));
+        break;
+      case 'ROLL SOLUTION':
+        body.push(int(m.rollSolution));
+        break;
+      case 'GROUPS':
+        body.push(int(m.groups.length));
+        for (const g of m.groups) {
+          body.push(g.label, int(g.members.length));
+          for (const mm of g.members) body.push(int(mm.point) + int(mm.end));
+        }
+        break;
+      default: {
+        const raw = m.raw.find((r) => r.name === name);
+        if (!raw) continue;
+        body.push(...raw.lines);
+      }
+    }
+    out.push(name, ...body);
+  }
+  return out.join('\r\n') + '\r\n';
+}
