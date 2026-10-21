@@ -25,3 +25,5 @@ export * from './io/hpMath.js';
 export * from './io/hardpoints.js';
 export * from './model/groups.js';
 export * from './model/coordSets.js';
+export * from './math/eigen.js';
+export * from './compliance/modal.js';

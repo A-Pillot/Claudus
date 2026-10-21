@@ -113,6 +113,16 @@ export function complianceLines(data: ComplianceData, order: PointOrder, positio
   return out;
 }
 
+const KIND = ['none', 'point', 'rel', 'abs'] as const;
+const refNums = (r: AxisRef): number[] =>
+  r.kind === 'none' ? [0, 0, 0, 0] : r.kind === 'point' ? [1, r.point, 0, 0] : [KIND.indexOf(r.kind), ...r.v];
+const numsRef = (n: number[]): AxisRef => {
+  const k = KIND[n[0]] ?? 'none';
+  if (k === 'point') return { kind: 'point', point: n[1] };
+  if (k === 'rel' || k === 'abs') return { kind: k, v: [n[1], n[2], n[3]] };
+  return { kind: 'none' };
+};
+
 const quote = (s: string) => `'${s.replace(/'/g, "''")}'`;
 const unquote = (s: string) => s.trim().replace(/^'|'$/g, '').replace(/''/g, "'");
 const num = (v: number) => ` ${String(v)}`;
@@ -130,6 +140,8 @@ export function claudusComplianceLines(data: ComplianceData): string[] {
       if (b.lossAngle !== undefined) out.push(`LOSS ${end}${num(b.point)}${num(b.lossAngle)}`);
       if (b.xzPlane.kind === 'point') out.push(`XZPOINT ${end}${num(b.point)}${num(b.xzPlane.point)}`);
     }
+    for (const m of e.masses ?? [])
+      out.push(`MASS ${end}${[m.part, m.mass, ...m.inertia, ...refNums(m.cog), ...refNums(m.zAxis), ...refNums(m.xzPlane)].map(num).join('')}`);
   }
   for (const fs of data.forceSets) {
     out.push(`SET ${fs.on ? 1 : 0} ${quote(fs.label)}`);
@@ -166,6 +178,14 @@ export function parseClaudusCompliance(lines: string[], into: ComplianceData = d
       const b = into[end]?.bushes.find((x: BushData) => x.point === point);
       if (b && word === 'LOSS') b.lossAngle = value;
       if (b && word === 'XZPOINT') b.xzPlane = { kind: 'point', point: value };
+    } else if (word === 'MASS') {
+      const end = rest[0] as End;
+      const n = v.slice(1).map(Number);
+      const e = (into[end] ??= defaultEndCompliance());
+      (e.masses ??= []).push({
+        part: n[0], mass: n[1], inertia: [n[2], n[3], n[4], n[5], n[6], n[7]],
+        cog: numsRef(n.slice(8, 12)), zAxis: numsRef(n.slice(12, 16)), xzPlane: numsRef(n.slice(16, 20)),
+      });
     } else if (word === 'SET') {
       sets.push({ on: v[0] !== '0', label, forces: [] });
     } else if (word === 'FORCE' && sets.length) {
