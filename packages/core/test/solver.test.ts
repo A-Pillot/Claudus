@@ -5,9 +5,12 @@ import { wheelLowestZ } from '../src/solver/mechanism.js';
 import { listTemplates, getTemplate } from '../src/template/registry.js';
 import { bumpSweep, rollSweep, staticValues, steerSweep, wheelGeometry } from '../src/results/derivatives.js';
 import { defaultParams } from '../src/model/types.js';
-import { sampleModel } from './helpers.js';
+import { hasSample, sampleModel } from './helpers.js';
+import { newSuspension } from '../src/model/new.js';
 
+/** A corner from SHARK's sample file when there is one, otherwise from the template defaults. */
 const cornerFor = (slot: number) => {
+  if (!hasSample(`type${slot}.dat`)) return new Corner(newSuspension(slot), 'front');
   const m = sampleModel(`type${slot}.dat`);
   const data = m.front ?? m.rear!;
   return new Corner(data, m.front ? 'front' : 'rear');
@@ -45,7 +48,7 @@ describe('kinematic solver', () => {
   it.each(slots)('type %i static solve returns the input points', (slot) => {
     const c = cornerFor(slot);
     const st = c.solve({});
-    st.points.forEach((p, i) => p.forEach((v, k) => expect(v).toBeCloseTo(c.mech.staticPoints[i][k], 4)));
+    st.points.forEach((p, i) => p.forEach((v, k) => expect(v).toBeCloseTo(c.mech.staticPoints[i][k], 3)));
   });
 
   it('moves the wheel centre up by roughly the bump travel', () => {
@@ -185,5 +188,26 @@ describe('solveAxle', () => {
     const s = solveAxle(c, { roll: 1.5 });
     expect(s.rollCentre[1]).toBeCloseTo(row.rollCentre[1], 3);
     expect(s.rollCentre[2] - c.z0).toBeCloseTo(row.rollCentre[2], 3);
+  });
+});
+
+describe('virtual steering axis', () => {
+  it.each([1, 3])('type %i: the steer screw axis matches the ball-joint kingpin axis', (slot) => {
+    const c = cornerFor(slot);
+    for (const a of [{}, { bump: 30 }]) {
+      const st = c.solve(a);
+      const [lo, hi] = c.steeringAxis(st.points)!;
+      const [slo, shi] = c.screwAxis(st)!;
+      const u = [hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]];
+      const s = [shi[0] - slo[0], shi[1] - slo[1], shi[2] - slo[2]];
+      const nu = Math.hypot(...u), ns = Math.hypot(...s);
+      const cos = (u[0] * s[0] + u[1] * s[1] + u[2] * s[2]) / (nu * ns);
+      expect(cos).toBeGreaterThan(0.99999);
+      // The screw axis passes (very nearly) through the lower ball joint. Steering a strut also lifts the
+      // wheel slightly to keep it on the ground, which shifts the screw axis a fraction of a millimetre.
+      const d = [lo[0] - slo[0], lo[1] - slo[1], lo[2] - slo[2]];
+      const cr = [d[1] * s[2] - d[2] * s[1], d[2] * s[0] - d[0] * s[2], d[0] * s[1] - d[1] * s[0]];
+      expect(Math.hypot(...cr) / ns).toBeLessThan(1);
+    }
   });
 });

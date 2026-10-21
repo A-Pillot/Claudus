@@ -10,7 +10,8 @@
  */
 import { add, cross, dist, mat3MulVec, norm, normalize, rotFromVec, scale, sub, type Vec3 } from '../math/vec3.js';
 import { lmStep, norm2 } from '../math/linalg.js';
-import { GenType, GROUND, NONE, findGen, type Template } from '../template/types.js';
+import { GenType, GROUND, NONE, dataPoints, findGen, type Template } from '../template/types.js';
+import { expandPoints } from '../template/define.js';
 
 /** What moves the mechanism: where the ground is, where the body is, and the rack position. */
 export interface Drive {
@@ -52,13 +53,17 @@ export class Mechanism {
   private readonly coincidences: { point: number; body: number }[] = [];
   private readonly links: { a: number; b: number; length: number }[] = [];
   private readonly strut?: { top: number; slider: number; end: number };
+  /** Bodies attached only along one line (a link carrying an extra point): their spin about that line is held. */
+  private readonly spinLocks: { body: number; axis: Vec3 }[] = [];
   readonly wheelCentre: number;
   readonly stubAxle: number;
   readonly rackPoint?: number;
 
   constructor(template: Template, points: Vec3[], rollingRadius: number) {
-    if (points.length !== template.points.length)
-      throw new Error(`Template ${template.slot} needs ${template.points.length} points, model has ${points.length}`);
+    const nData = dataPoints(template).length;
+    if (points.length > nData && points.length !== template.points.length)
+      throw new Error(`Template ${template.slot} needs ${nData} points, model has ${points.length}`);
+    points = expandPoints(template, points.slice(0, nData));
     this.template = template;
     this.staticPoints = points.map((p) => [...p] as Vec3);
     this.rollingRadius = rollingRadius;
@@ -92,6 +97,28 @@ export class Mechanism {
       return src;
     });
     this.nUnknowns = offset;
+
+    // A body whose joints all lie on one line could spin freely about it, leaving any other point on it
+    // (a spring or damper mount) undefined. Hold that spin at its static value.
+    // Only bodies that carry nothing else the solver constrains: a wheel or strut body's spin is real motion.
+    const memberships = template.points.map((p) => [p.part1, p.part2].filter((x) => x !== NONE).length);
+    const constrained = new Set(
+      [GenType.WheelCentre, GenType.StubAxle, GenType.StrutSliderPoint, GenType.StrutEndPoint]
+        .map((g) => findGen(template, g))
+        .filter((p) => p !== undefined)
+        .map((p) => this.index.get(p!.no)!),
+    );
+    this.bodies.forEach((b, bi) => {
+      if ([...b.local.keys()].some((i) => constrained.has(i))) return;
+      const joints = [...b.local.keys()].filter((i) => memberships[i] > 1).map((i) => points[i]);
+      if (joints.length < 2) return;
+      let a = joints[0];
+      let far = joints[1];
+      for (const q of joints) if (dist(a, q) > dist(a, far)) far = q;
+      const axis = normalize(sub(far, a));
+      const collinear = joints.every((q) => norm(cross(sub(q, a), axis)) < 1e-6 * Math.max(1, dist(a, far)));
+      if (collinear) this.spinLocks.push({ body: bi, axis });
+    });
 
     // Coincidence: every rigid body a point is on must agree with the point's primary position.
     template.points.forEach((p, i) => {
@@ -167,6 +194,11 @@ export class Mechanism {
     const pos = (i: number) => this.position(i, x, drive);
     for (const c of this.coincidences) r.push(...sub(this.bodyPoint(c.body, c.point, x), pos(c.point)));
     for (const l of this.links) r.push(dist(pos(l.a), pos(l.b)) - l.length);
+    for (const l of this.spinLocks) {
+      const o = this.bodies[l.body].offset;
+      // twist component of the body's rotation vector, scaled to be comparable with mm residuals
+      r.push(100 * (x[o + 3] * l.axis[0] + x[o + 4] * l.axis[1] + x[o + 5] * l.axis[2]));
+    }
     if (this.strut) {
       const P = pos(this.strut.slider);
       const axis = normalize(sub(pos(this.strut.end), P));

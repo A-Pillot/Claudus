@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { newModel, type End, type Model, type Vec3, type VehicleParams } from '@claudus/core';
+import { completeModel, newModel, type End, type Model, type Vec3, type VehicleParams } from '@claudus/core';
 
 export interface ArticulationState {
   bump: number;
@@ -37,8 +37,8 @@ export const useApp = create<AppState>((set) => ({
   art: zeroArt,
   selected: null,
   revision: 0,
-  setModel: (model, fileName) =>
-    set((s) => ({ model, fileName, dirty: false, end: model.front ? 'front' : 'rear', art: zeroArt, selected: null, revision: s.revision + 1 })),
+  setModel: (loaded, fileName) =>
+    set((s) => ({ model: completeModel(loaded), fileName, dirty: false, end: loaded.front ? 'front' : 'rear', art: zeroArt, selected: null, revision: s.revision + 1 })),
   setEnd: (end) => set({ end, art: zeroArt, selected: null }),
   setArt: (a) => set((s) => ({ art: { ...s.art, ...a } })),
   select: (selected) => set({ selected }),

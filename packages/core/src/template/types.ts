@@ -60,6 +60,13 @@ export enum PointType {
   PreSolveKineFix = 9,
 }
 
+/** A dummy point sits `offset` mm from point `at`, in the direction from point dir[0] to point dir[1]. */
+export interface DummySpec {
+  at: number;
+  dir: [number, number];
+  offset: number;
+}
+
 export interface TemplatePoint {
   /** Point number used in data files and labels (not necessarily its index). */
   no: number;
@@ -79,6 +86,11 @@ export interface TemplatePoint {
   refs?: number[];
   /** Text used to find this point in an Adams subsystem file. */
   adamsLabel?: string;
+  /**
+   * A construction point that is not stored in model files (SHARK's "dummy axis" points), used to turn a
+   * shared ball joint into a revolute. Dummy points always come after the data points.
+   */
+  dummy?: DummySpec;
 }
 
 export type GraphicKind =
@@ -105,6 +117,9 @@ export interface Template {
   /** Where the template came from. */
   source?: 'builtin' | 'user' | 'custom' | 'file';
 }
+
+/** The points stored in model files, in file order (everything except dummy points). */
+export const dataPoints = (t: Template): TemplatePoint[] => t.points.filter((p) => !p.dummy);
 
 export const hasGen = (p: TemplatePoint, g: GenType): boolean => p.gen1 === g || p.gen2 === g;
 

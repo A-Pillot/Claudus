@@ -2,7 +2,8 @@
  * One suspension corner (right-hand side) with the articulations SHARK offers: bump/rebound, body roll,
  * steering and combinations of them. The left side is the mirror image.
  */
-import { deg, rad, rotateAbout, sub, type Vec3 } from '../math/vec3.js';
+import { add, cross, deg, normalize, rad, rotateAbout, scale, sub, type Vec3 } from '../math/vec3.js';
+import { solveLinear } from '../math/linalg.js';
 import type { End, SuspensionData } from '../model/types.js';
 import { getTemplate } from '../template/registry.js';
 import { GenType, findGen, type Template } from '../template/types.js';
@@ -124,7 +125,51 @@ export class Corner {
     return t[2] + (t[1] * r.tcp[1]) / r.tcp[2];
   }
 
-  /** Steering axis as (lower point, upper point), or undefined when the template has none. */
+  /**
+   * Steering axis at a solved state. Uses the ball joints when the template has them; otherwise, for a
+   * steerable template, the instantaneous screw axis of the upright under a small rack movement (SHARK's
+   * "steer small perturbation" method for virtual kingpins).
+   */
+  steeringAxisAt(st: CornerState, h = 0.05): [Vec3, Vec3] | undefined {
+    const fixed = this.steeringAxis(st.points);
+    if (fixed || this.mech.rackPoint === undefined) return fixed;
+    return this.screwAxis(st, h);
+  }
+
+  /** Instantaneous screw axis of the upright for a small rack movement, as (lower point, upper point). */
+  screwAxis(st: CornerState, h = 0.05): [Vec3, Vec3] | undefined {
+    if (this.mech.rackPoint === undefined) return undefined;
+    const body = this.mech.bodies.find((b) => b.local.has(this.mech.wheelCentre));
+    if (!body) return undefined;
+    const rack = st.drive.rack ?? 0;
+    const a = this.mech.solve({ ...st.drive, rack: rack + h }, st.x);
+    const b = this.mech.solve({ ...st.drive, rack: rack - h }, st.x);
+    const idx = [...body.local.keys()];
+    const p = idx.map((i) => st.points[i]);
+    const v = idx.map((i) => sub(a.points[i], b.points[i]).map((d) => d / (2 * h)) as Vec3);
+    // Rigid-body velocities: v_i - v_0 = w x (p_i - p_0). Solve for w by least squares.
+    const A: number[][] = [];
+    const rhs: number[] = [];
+    for (let k = 1; k < idx.length; k++) {
+      const d = sub(p[k], p[0]);
+      const dv = sub(v[k], v[0]);
+      // w x d = [-d]x w
+      A.push([0, d[2], -d[1]], [-d[2], 0, d[0]], [d[1], -d[0], 0]);
+      rhs.push(dv[0], dv[1], dv[2]);
+    }
+    const AtA = [0, 1, 2].map((i) => [0, 1, 2].map((j) => A.reduce((s, r) => s + r[i] * r[j], 0)));
+    const Atb = [0, 1, 2].map((i) => A.reduce((s, r, k) => s + r[i] * rhs[k], 0));
+    const w = solveLinear(AtA, Atb);
+    if (!w) return undefined;
+    const w2 = w[0] * w[0] + w[1] * w[1] + w[2] * w[2];
+    if (w2 < 1e-20) return undefined;
+    const o = add(p[0], scale(cross(w as Vec3, v[0]), 1 / w2));
+    let u = normalize(w as Vec3);
+    if (u[2] < 0) u = scale(u, -1);
+    return [sub(o, scale(u, 100)), add(o, scale(u, 100))];
+  }
+
+  /** Steering axis from ball joints as (lower point, upper point), or undefined when the template has none. */
   steeringAxis(points: Vec3[]): [Vec3, Vec3] | undefined {
     const lbj = this.idx(GenType.LowerBallJoint);
     let top = this.idx(GenType.UpperBallJoint);

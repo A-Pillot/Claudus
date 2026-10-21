@@ -79,6 +79,7 @@ function Side({ corner, points, mirrored }: { corner: Corner; points: Vec3[]; mi
       {spring[0] && spring[1] && <Line points={[p(spring[0].no), p(spring[1].no)]} color="#a5e887" lineWidth={2} dashed dashSize={12} gapSize={6} />}
       <Wheel wc={points[corner.mech.wheelCentre]} stub={points[corner.mech.stubAxle]} radius={corner.radius} width={width} />
       {t.points.map((tp, i) => {
+        if (tp.dummy) return null;
         const isGround = tp.part1 === GROUND || tp.part2 === GROUND;
         const sel = !mirrored && selected === i;
         return (

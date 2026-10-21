@@ -23,7 +23,7 @@ export interface WheelGeometry {
 }
 
 /** Wheel angles and steering-axis offsets for a solved right-hand corner. */
-export function wheelGeometry(c: Corner, points: Vec3[], groundZ: number): WheelGeometry {
+export function wheelGeometry(c: Corner, points: Vec3[], groundZ: number, state?: CornerState): WheelGeometry {
   const wc = points[c.mech.wheelCentre];
   const a = spindleAxis(wc, points[c.mech.stubAxle]);
   const tcp = c.tcp(points);
@@ -41,7 +41,7 @@ export function wheelGeometry(c: Corner, points: Vec3[], groundZ: number): Wheel
     tcp,
     wc,
   };
-  const axis = c.steeringAxis(points);
+  const axis = state ? c.steeringAxisAt(state) : c.steeringAxis(points);
   if (axis) {
     const [lo, hi] = axis;
     const u = sub(hi, lo);
@@ -157,7 +157,7 @@ export function bumpSweep(c: Corner, p: VehicleParams, values = range(-p.rebound
   const sign = c.end === 'front' ? -1 : 1;
   const rows = sweep(values, (v, w) => c.solve({ bump: v }, w), (st) => {
     const r = c.rates(st);
-    const g = wheelGeometry(c, st.points, st.groundZ);
+    const g = wheelGeometry(c, st.points, st.groundZ, st);
     const rc = c.rollCentreBump(st, r);
     return {
       bump: st.articulation.bump,
@@ -203,7 +203,7 @@ export function rollSweep(c: Corner, p: VehicleParams, values = range(-p.rollAng
     const nr: [number, number] = [-r.tcp[2], r.tcp[1]];
     const nl: [number, number] = [-other.r.tcp[2], -other.r.tcp[1]];
     const [y, z] = intersectYZ(tr, nr, tl, nl);
-    const g = wheelGeometry(c, st.points, st.groundZ);
+    const g = wheelGeometry(c, st.points, st.groundZ, st);
     return {
       roll: v,
       ...g,
@@ -221,7 +221,7 @@ export function rollSweep(c: Corner, p: VehicleParams, values = range(-p.rollAng
 export function steerSweep(c: Corner, p: VehicleParams, values = range(-p.steerTravel, p.steerTravel, p.steerIncrement)): SteerRow[] {
   if (c.mech.rackPoint === undefined) return [];
   const all = [...new Set(values.flatMap((v) => [v, -v]))].sort((a, b) => a - b);
-  const geo = sweep(all, (v, w) => c.solve({ rack: v }, w), (st) => wheelGeometry(c, st.points, st.groundZ));
+  const geo = sweep(all, (v, w) => c.solve({ rack: v }, w), (st) => wheelGeometry(c, st.points, st.groundZ, st));
   const g0 = geo.get(0) ?? wheelGeometry(c, c.solve({}).points, c.z0);
   const track = 2 * g0.tcp[1];
   const L = p.wheelbase;
@@ -265,7 +265,7 @@ export interface StaticValues extends WheelGeometry {
 export function staticValues(c: Corner): StaticValues {
   const st = c.solve({});
   const r = c.rates(st);
-  return { ...wheelGeometry(c, st.points, st.groundZ), rollCentreHeight: c.rollCentreBump(st, r) - c.z0 };
+  return { ...wheelGeometry(c, st.points, st.groundZ, st), rollCentreHeight: c.rollCentreBump(st, r) - c.z0 };
 }
 
 export interface EndAnalysis {
@@ -323,8 +323,8 @@ export function solveAxle(c: Corner, a: { bump?: number; roll?: number; rack?: n
   return {
     right,
     leftMirror,
-    geometryRight: wheelGeometry(c, right.points, right.groundZ),
-    geometryLeft: wheelGeometry(c, leftMirror.points, leftMirror.groundZ),
+    geometryRight: wheelGeometry(c, right.points, right.groundZ, right),
+    geometryLeft: wheelGeometry(c, leftMirror.points, leftMirror.groundZ, leftMirror),
     rollCentre: [(tr[0] + tl[0]) / 2, y, z],
   };
 }
