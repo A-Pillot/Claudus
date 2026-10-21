@@ -365,7 +365,9 @@ table.grid tr.st-undefined td, table.grid tr.st-derived td { opacity: 0.75; }
 .graphhead { align-items: center; }
 .graphhead select { min-width: 0; flex: 1 1 auto; }
 .graphhead .icon { margin-left: 0; flex: none; }
-.graphhead select:first-child { flex: 0 0 auto; }
+.graphhead select:first-child { flex: 0 0 74px; }
+.graphhead { gap: 3px; }
+.graphhead .icon { padding: 2px 5px; }
 .menulist .menurow .numcell, .barfield .numcell { border-color: var(--line); }
 /* 3D view tools, box zoom, coincidence list */
 .viewtools { position: absolute; right: 12px; top: 10px; display: flex; gap: 6px; align-items: center; z-index: 5; }
