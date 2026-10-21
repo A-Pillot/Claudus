@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { getTemplate, GROUND, hasTemplate } from '@claudus/core';
+import { dataPoints, getTemplate, GROUND, hasTemplate } from '@claudus/core';
 import { useApp } from '../store';
 
 /** A number input that only commits on Enter or blur, so half-typed values never reach the solver. */
@@ -57,7 +57,7 @@ export function PointTable() {
           <tr><th>No</th><th>Point</th><th>X</th><th>Y</th><th>Z</th></tr>
         </thead>
         <tbody>
-          {t.points.map((tp, i) => (
+          {dataPoints(t).map((tp, i) => (
             <tr
               key={tp.no}
               ref={(el) => { rowRefs.current[i] = el; }}

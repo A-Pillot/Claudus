@@ -1,6 +1,7 @@
 /** Formatted Suspension Derivative File (SDF) listing, laid out like SHARK's "List SDF" window. */
 import type { Model } from '../model/types.js';
 import type { EndAnalysis } from './derivatives.js';
+import { dataPoints } from '../template/types.js';
 
 const f = (v: number, d = 4, w = 12) => (Number.isFinite(v) ? v.toFixed(d) : '-').padStart(w);
 
@@ -25,8 +26,8 @@ export function formatSdf(m: Model, results: EndAnalysis[], name = ''): string {
     const data = m[a.end]!;
     L.push('', '='.repeat(96), `${END} SUSPENSION    TYPE ${t.slot} ${t.label}`, '='.repeat(96), '', '  HARD POINTS (right-hand side)', '');
     L.push('   No  Label                                            X            Y            Z');
-    t.points.forEach((tp, i) => {
-      const q = data.points[i];
+    dataPoints(t).forEach((tp, i) => {
+      const q = data.points[i] ?? tp.def;
       L.push(`  ${String(tp.no).padStart(3)}  ${tp.label.padEnd(42).slice(0, 42)}${f(q[0], 2, 13)}${f(q[1], 2, 13)}${f(q[2], 2, 13)}`);
     });
     L.push(`       Rolling radius ${data.rollingRadius} mm`);

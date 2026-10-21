@@ -8,8 +8,13 @@ SHARK `.dat` model files, solves the suspension kinematics, and lists the same s
 ## Status
 
 **Phase 1, the calculation core (`packages/core`)**
-- **Templates:** 12 built-in suspension types: 1, 2, 3, 4, 6, 7, 10, 11, 14, 15, 16 and 17. Point numbers,
-  labels and default coordinates match SHARK's own sample files.
+- **Templates:** 21 built-in suspension types: 1, 2, 3, 4, 6, 7, 10, 11, 12, 14, 15, 16, 17, 18, 19, 20,
+  22, 24, 25, 27 and 28.
+  - Point numbers and labels follow the SHARK help.
+  - Default coordinates come from SHARK's sample files where there is one. SHARK shipped no sample for
+    types 19, 20, 22, 24, 25, 27 and 28, so their defaults are designed layouts.
+  - Templates with linked lower or upper arms use a virtual steering axis. Like SHARK, Claudus finds it
+    from a small steering movement.
 - **Files:** SHARK `.dat` model files are read and written. Sections Claudus does not use yet, such as
   compliance, forces and Raven data, are kept unchanged.
 - **Solver:** handles bump and rebound, body roll about the static roll centre, rack steer, and
@@ -29,7 +34,8 @@ SHARK `.dat` model files, solves the suspension kinematics, and lists the same s
 - **Desktop:** a Tauri desktop app with native file dialogs.
 
 Next up:
-- The remaining templates, the template editor and the 2D module.
+- The rigid axles and the two-sided templates (5, 8, 9, 21, 23, 26 and 29).
+- The template editor and the 2D module.
 - Compliance.
 - Modal analysis, the forced-damped response and the optimiser.
 
