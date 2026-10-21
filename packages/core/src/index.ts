@@ -15,6 +15,7 @@ export * from './graphics/elements.js';
 export * from './results/derivatives.js';
 export * from './results/sdf.js';
 export * from './model/new.js';
+export * from './twod/index.js';
 export * from './compliance/types.js';
 export * from './compliance/solve.js';
 export * from './compliance/analysis.js';
