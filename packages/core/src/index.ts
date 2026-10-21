@@ -11,6 +11,7 @@ export * from './model/types.js';
 export * from './io/dat.js';
 export * from './solver/mechanism.js';
 export * from './solver/corner.js';
+export * from './graphics/elements.js';
 export * from './results/derivatives.js';
 export * from './results/sdf.js';
 export * from './model/new.js';
