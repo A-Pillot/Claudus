@@ -1,4 +1,4 @@
-import type { AxleState, Corner, WheelGeometry } from '@claudus/core';
+import { elementShape, isMeasure, optionOf, type AxleState, type Corner, type WheelGeometry } from '@claudus/core';
 
 const rows: { label: string; key: keyof WheelGeometry; unit: string; d: number }[] = [
   { label: 'Camber', key: 'camber', unit: '°', d: 3 },
@@ -19,6 +19,15 @@ export function Readouts({ corner, state }: { corner: Corner; state: AxleState }
   const rc = state.rollCentre;
   const damper = corner.damperLength(state.right.points);
   const spring = corner.springLength(state.right.points);
+  const at = (no: number) => {
+    const i = corner.mech.index.get(no);
+    return i === undefined ? undefined : state.right.points[i];
+  };
+  // Live values of the distance, components and angle elements.
+  const measures = corner.template.graphics.flatMap((g, i) => {
+    const s = isMeasure(g) ? elementShape(g, at) : undefined;
+    return s?.type === 'measure' ? [{ i, g, s }] : [];
+  });
   return (
     <div className="readouts">
       <table>
@@ -51,6 +60,23 @@ export function Readouts({ corner, state }: { corner: Corner; state: AxleState }
           <tr><td>Track</td><td className="num">{fmt(R.tcp[1] + L.tcp[1], 1)}</td><td className="unit">mm</td></tr>
         </tbody>
       </table>
+      {measures.length > 0 && (
+        <table className="measures">
+          <thead><tr><th colSpan={3}>Measurements</th></tr></thead>
+          <tbody>
+            {measures.map(({ i, g, s }) => (
+              <tr key={i}>
+                <td>{optionOf(g)?.name ?? g.kind} {g.points.join('-')}</td>
+                <td className="num">
+                  {fmt(s.value, s.kind === 'angle' ? 3 : 2)}
+                  {s.comps && <div className="comps">{s.comps.map((v) => fmt(v, 2)).join(' / ')}</div>}
+                </td>
+                <td className="unit">{s.kind === 'angle' ? '°' : 'mm'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }
