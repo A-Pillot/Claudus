@@ -69,7 +69,7 @@ export const extendedBumpLines = (e: ExtendedBump): string[] => [
 export function evenBumpValues(p: VehicleParams): number[] {
   const out: number[] = [];
   if (p.bumpIncrement <= 0) return [0];
-  const n = Math.round((p.bumpTravel + p.reboundTravel) / p.bumpIncrement);
+  const n = Math.floor((p.bumpTravel + p.reboundTravel) / p.bumpIncrement + 1e-9); // never past the bump travel
   for (let i = 0; i <= n; i++) out.push(Number((-p.reboundTravel + i * p.bumpIncrement).toFixed(9)));
   return out;
 }

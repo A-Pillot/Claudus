@@ -42,9 +42,11 @@ export function fitCurve(x: number[], y: number[], order: number): Fit | undefin
       py.push(y[i]);
     }
   });
-  const ord = Math.min(order, px.length - 1);
+  // The order is limited by the number of distinct x values, not just the number of points.
+  const ord = Math.min(order, new Set(px).size - 1);
   if (ord < 1) return undefined;
   const coeffs = polyfit(px, py, ord);
+  if (!coeffs.every(Number.isFinite)) return undefined;
   while (coeffs.length < order + 1) coeffs.push(0);
   const at = (xv: number) => coeffs.reduce((s, c, k) => s + c * xv ** k, 0);
   const maxError = px.reduce((m, xv, i) => Math.max(m, Math.abs(at(xv) - py[i])), 0);
