@@ -41,7 +41,8 @@ models use standard textbook forms.
     26 are built from type 1 with the same tools SHARK's Edit menu offers.
   - Templates with linked lower or upper arms use a virtual steering axis. Like SHARK, Claudus finds it
     from a small steering movement.
-- **Files:** SHARK `.dat` model files are read and written. Sections Claudus does not use yet, such as
+- **Files:** SHARK `.dat` and `.shk` model files are read and written. SHARK uses both extensions for the
+  same "model data" text format (its Open and Save As dialogs list both), so they share one reader and writer. Sections Claudus does not use yet, such as
   compliance, forces and Raven data, are kept unchanged.
 - **Solver:** handles bump and rebound, body roll about the static roll centre, rack steer, and
   combinations of these.
@@ -55,13 +56,17 @@ models use standard textbook forms.
 **Phase 2, the app (`packages/app`)**
 - **3D view:** both sides of the axle, with wheels, springs, dampers and the roll centre. You can orbit
   the view, and clicking a point selects it.
+- **SpaceMouse:** 3Dconnexion SpaceMouse navigation of the 3D view (View / SpaceMouse…). In the browser it uses
+  WebHID (Chrome, Edge, Opera); the desktop app reads the device natively, and the Linux packages install a
+  udev rule so the device can be opened without root.
 - **Motion:** sliders for bump, roll and steer, each with an animate button.
 - **Live readouts:** camber, toe, castor, kingpin, trails, offsets, roll centre and track.
 - **Editing:** a hard point table and the general data panel. Results update as you edit.
 - **Graphs:** four configurable graphs of any derivative against bump, roll or steer, with front and rear
   overlaid.
 - **SDF:** a listing view, with export.
-- **Files:** New (from any template), Open and Save for `.dat` files.
+- **Files:** New (from any template), Open, Save and Save As for `.dat` and `.shk` files. Save keeps the
+  extension the file was opened with; Save As (Ctrl+Shift+S) offers both.
 - **Desktop:** a Tauri desktop app with native file dialogs.
 
 **2D module (`packages/core/src/twod`, `packages/app/src/twod`)**

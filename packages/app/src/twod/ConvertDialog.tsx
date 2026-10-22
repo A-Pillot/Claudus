@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { convert2DTo3D, convertTargets, defaultTwoDConvertOptions, getTemplate, type End, type Model2D } from '@claudus/core';
+import { convert2DTo3D, convertTargets, defaultTwoDConvertOptions, getTemplate, modelBaseName, modelExtension, type End, type Model2D } from '@claudus/core';
 import { useApp } from '../store';
 import { NumberCell } from '../components/PointTable';
 import { useTwoD } from './store2d';
@@ -15,7 +15,7 @@ export function ConvertDialog({ model, onClose }: { model: Model2D; onClose: () 
   const create = () => {
     try {
       const m3 = convert2DTo3D(model, o);
-      useApp.getState().setModel(m3, fileName.replace(/_2d\.dat$/i, '').replace(/\.dat$/i, '') + '_3d.dat');
+      useApp.getState().setModel(m3, modelBaseName(fileName, true) + '_3d' + (modelExtension(fileName) ?? '.dat'));
       useApp.setState({ dirty: true });
       useTwoD.getState().deactivate();
       onClose();

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { formatSdf, listTemplates, newModel, newSuspension, getTemplate, writeDat, writeTwoD, type End, type TwoDType } from '@claudus/core';
+import { MODEL_ACCEPT, formatSdf, modelBaseName, listTemplates, newModel, newSuspension, getTemplate, writeDat, writeTwoD, type End, type TwoDType } from '@claudus/core';
 import type { AnalysisState } from '../derived';
 import { useApp } from '../store';
-import { files } from '../files';
+import { files, modelFilters } from '../files';
 import { templatesForModel } from '../templates';
 import { TemplateMenu } from './TemplateMenu';
 import { useTwoD } from '../twod/store2d';
@@ -27,34 +27,35 @@ export function Toolbar({ analysis }: { analysis: AnalysisState }) {
   const two2 = useTwoD();
 
   const open = async () => {
-    const f = await files().open('.dat');
+    const f = await files().open(MODEL_ACCEPT);
     if (!f) return;
     // A 2D file switches to the 2D module, a 3D file back to the 3D module.
     setError(loadFileText(f));
   };
-  const save = async () => {
+  // Save keeps the extension the file was opened with (.dat or .shk); Save As offers both.
+  const save = async (ask = false) => {
     if (two) {
-      const name = await files().save(two2.fileName, writeTwoD(two2.model));
+      const name = await files().save(two2.fileName, writeTwoD(two2.model), { ask, filters: modelFilters(two2.fileName) });
       if (name) two2.markSaved(name);
       return;
     }
     // Custom templates the model uses travel inside the file, so it opens on any machine.
     // Optimiser settings, when the file includes them, are saved as they are now.
     const out = model.optimiser ? { ...model, optimiser: optimiserSnapshot() } : model;
-    const name = await files().save(fileName, writeDat({ ...out, templates: templatesForModel(out) }));
+    const name = await files().save(fileName, writeDat({ ...out, templates: templatesForModel(out) }), { ask, filters: modelFilters(fileName) });
     if (name) markSaved(name);
   };
   // Ctrl+S saves the file instead of the browser's save-page dialog.
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); void save(); }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); void save(e.shiftKey); }
     };
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
   });
   const exportSdf = async () => {
     if (!analysis.results || !analysis.model) return;
-    await files().save(fileName.replace(/\.dat$/i, '') + '.sdf', formatSdf(analysis.model, analysis.results, fileName));
+    await files().save(modelBaseName(fileName) + '.sdf', formatSdf(analysis.model, analysis.results, fileName));
   };
 
   return (
@@ -63,7 +64,8 @@ export function Toolbar({ analysis }: { analysis: AnalysisState }) {
       <button onClick={() => setShowNew(true)}>New</button>
       <button onClick={open}>Open…</button>
       <RecentMenu onError={setError} />
-      <button onClick={save}>Save</button>
+      <button onClick={() => save()} title="Save (Ctrl+S)">Save</button>
+      <button onClick={() => save(true)} title="Save As: choose a name and .dat or .shk (Ctrl+Shift+S)">Save As…</button>
       {!two && <button onClick={exportSdf} disabled={!analysis.results || analysis.busy}>Export SDF</button>}
       {!two && <EditMenu onError={setError} />}
       {!two && <ViewMenu />}

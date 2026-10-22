@@ -10,14 +10,42 @@
     "beforeBuildCommand": "npm run build"
   },
   "app": {
-    "windows": [{ "title": "Claudus", "width": 1500, "height": 950, "minWidth": 1000, "minHeight": 700 }],
-    "security": { "csp": null }
+    "windows": [
+      {
+        "title": "Claudus",
+        "width": 1500,
+        "height": 950,
+        "minWidth": 1000,
+        "minHeight": 700
+      }
+    ],
+    "security": {
+      "csp": null
+    }
   },
   "bundle": {
     "active": true,
     "targets": "all",
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
     "category": "Utility",
-    "shortDescription": "Suspension kinematics analysis"
+    "shortDescription": "Suspension kinematics analysis",
+    "linux": {
+      "deb": {
+        "files": {
+          "/usr/lib/udev/rules.d/70-claudus-spacemouse.rules": "70-claudus-spacemouse.rules"
+        }
+      },
+      "rpm": {
+        "files": {
+          "/usr/lib/udev/rules.d/70-claudus-spacemouse.rules": "70-claudus-spacemouse.rules"
+        }
+      }
+    }
   }
 }

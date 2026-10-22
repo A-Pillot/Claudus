@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { addEndFromModel, CoordSetError, DatParseError, readDat, type FileFormat } from '@claudus/core';
+import { addEndFromModel, CoordSetError, DatParseError, MODEL_ACCEPT, readDat, type FileFormat } from '@claudus/core';
 import { useApp } from '../store';
 import { useModes } from '../modes';
 import { files } from '../files';
@@ -22,7 +22,7 @@ export function TransferMenu({ onError }: { onError: (msg: string | null) => voi
   const show = (mode: TransferMode, format: FileFormat) => () => { setOpen(false); setDialog({ mode, format }); };
   const addEnd = async () => {
     setOpen(false);
-    const f = await files().open('.dat');
+    const f = await files().open(MODEL_ACCEPT);
     if (!f) return;
     try {
       const { model: next, end } = addEndFromModel(model, readDat(f.text), useModes.getState().axleFit);
@@ -44,7 +44,7 @@ export function TransferMenu({ onError }: { onError: (msg: string | null) => voi
           <button onClick={show('export', 'adams')}>Export to Adams subsystem…</button>
           <button onClick={show('export', 'usera')}>Export to User A format…</button>
           <hr />
-          <button onClick={addEnd} disabled={!!(model.front && model.rear)}>Add other end from a .dat file…</button>
+          <button onClick={addEnd} disabled={!!(model.front && model.rear)}>Add other end from a .dat / .shk file…</button>
         </div>
       )}
       {dialog && <TransferDialog mode={dialog.mode} format={dialog.format} onClose={() => setDialog(null)} />}

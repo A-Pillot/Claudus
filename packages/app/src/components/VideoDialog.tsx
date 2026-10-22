@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { aviFrameSize, sweepPath } from '@claudus/core';
+import { aviFrameSize, modelBaseName, sweepPath } from '@claudus/core';
 import { useApp, type ArticulationState } from '../store';
 import { files } from '../files';
 import { useCorner } from '../derived';
@@ -67,7 +67,7 @@ export function VideoDialog({ onClose }: { onClose: () => void }) {
         (d, t) => setProgress([d, t]),
         ctl.signal,
       );
-      const base = fileName.replace(/\.dat$/i, '') + (source === 'sweep' ? '_' + mode : '_frames');
+      const base = modelBaseName(fileName) + (source === 'sweep' ? '_' + mode : '_frames');
       const saved = await files().saveBinary(`${base}.${r.ext}`, r.data, r.mime);
       setMessage(saved ? { text: `Saved ${saved}: ${r.frames} frames, ${r.width} x ${r.height}.` } : { text: 'Not saved.' });
     } catch (e) {
