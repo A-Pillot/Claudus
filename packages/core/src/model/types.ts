@@ -26,6 +26,8 @@ export interface VehicleParams {
   frontSuspensionType: number;
   rearSuspensionType: number;
   suspLineExtra: [number, number];
+  /** Lines after the seven Claudus reads (SHARK 4.03 writes one more), kept as they are. */
+  extraLines?: string[];
 }
 
 export type End = 'front' | 'rear';

@@ -72,7 +72,8 @@ function loadCharts(): ChartDef[] {
   return DEFAULTS.map((c, id) => ({ id, ...c }));
 }
 
-export function Graphs({ results, tolerance }: { results?: EndAnalysis[]; tolerance?: ToleranceAnalysis }) {
+/** failed: the analysis stopped with an error, so there is nothing to wait for. */
+export function Graphs({ results, tolerance, failed }: { results?: EndAnalysis[]; tolerance?: ToleranceAnalysis; failed?: boolean }) {
   const [charts, setCharts] = useState<ChartDef[]>(loadCharts);
   const cmd = useLab((s) => s.graphCmd);
   const seen = useRef(cmd.n);
@@ -98,6 +99,7 @@ export function Graphs({ results, tolerance }: { results?: EndAnalysis[]; tolera
         <GraphCard
           key={c.id}
           results={results}
+          failed={failed}
           tolerance={tolerance}
           mode={c.mode}
           varKey={c.key}
@@ -133,7 +135,7 @@ const fixed = (v: number | undefined, f = 1, d = 3) => (v === undefined ? '–' 
 /** Per-series drawing info that uPlot's own series options do not cover. */
 interface ColMeta { marker: Marker; colour: string; size: number; grad: boolean }
 
-function GraphCard({ results, tolerance, mode, varKey, onChange, onClose }: { results?: EndAnalysis[]; tolerance?: ToleranceAnalysis; mode: Mode; varKey: string; onChange: (m: Mode, k: string) => void; onClose: () => void }) {
+function GraphCard({ results, tolerance, failed, mode, varKey, onChange, onClose }: { results?: EndAnalysis[]; tolerance?: ToleranceAnalysis; failed?: boolean; mode: Mode; varKey: string; onChange: (m: Mode, k: string) => void; onClose: () => void }) {
   const base = VARIABLES[mode];
   const extra = useMemo(() => measureVars(results), [results]);
   // A steering box turns an arm, so steering travel is an angle.
@@ -294,7 +296,7 @@ function GraphCard({ results, tolerance, mode, varKey, onChange, onClose }: { re
           xLabel={def.x.unit ? `${def.x.label} (${unitText(def.x.unit, units)})` : def.x.label} yLabel={y.unit ? `${y.label} (${unitText(y.unit, units)})` : y.label} marker={current}
         />
       ) : (
-        <div className="muted pad">{results ? (mode === 'combined' ? 'No combined motion path. Define one with Data / Set / edit combined motion profile (steerable suspensions only).' : 'Not applicable to this model.') : 'Calculating…'}</div>
+        <div className="muted pad">{results ? (mode === 'combined' ? 'No combined motion path. Define one with Data / Set / edit combined motion profile (steerable suspensions only).' : 'Not applicable to this model.') : failed ? 'No results: the model could not be solved (see the message above).' : 'Calculating…'}</div>
       )}
       {styling && <GraphStyleDialog options={opts} onChange={setOpts} onClose={() => setStyling(false)} />}
       {menu && (
