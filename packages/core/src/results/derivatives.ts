@@ -191,10 +191,11 @@ function wheelExtras(c: Corner, st: CornerState, rs: CornerRates[], stat: { d2: 
     tyreForceLeft: loads?.[1] ?? NaN,
     swingFrontLength: sw.front.length,
     swingFrontY: sw.front.centre[0],
-    swingFrontZ: sw.front.centre[1] - c.z0,
+    // Same frame as the roll centre: unaffected by whether the ground or the body moves.
+    swingFrontZ: sw.front.centre[1] - st.dz - c.z0,
     swingSideLength: sw.side.length,
     swingSideX: sw.side.centre[0],
-    swingSideZ: sw.side.centre[1] - c.z0,
+    swingSideZ: sw.side.centre[1] - st.dz - c.z0,
     tcpGradient: Math.abs(r.tcp[2]) > 1e-12 ? r.tcp[0] / r.tcp[2] : NaN,
     damper2Ratio: r2 ? ratio(r2.tcp[2], r2.damperLength) : NaN,
     spring2Ratio: r2 ? ratio(r2.tcp[2], r2.springLength) : NaN,
@@ -228,7 +229,8 @@ function antiPitch(c: Corner, r: CornerRates, p: VehicleParams, kind: 'dive' | '
 function range(from: number, to: number, step: number): number[] {
   const out: number[] = [];
   if (step <= 0) return [from];
-  const n = Math.round((to - from) / step);
+  // Whole increments only: a span that is not a multiple of the step stops short of `to`, never past it.
+  const n = Math.floor((to - from) / step + 1e-9);
   for (let i = 0; i <= n; i++) out.push(Number((from + i * step).toFixed(9)));
   return out;
 }
@@ -373,7 +375,9 @@ export function steerSweep(c: Corner, p: VehicleParams, values = range(-p.steerT
   // On a corner model the left wheel at rack +v is the mirror of the right wheel at rack -v.
   const leftAt = (v: number) => pairs.get(v)!.left ?? geo.get(-v)!;
   const g0 = geo.get(0) ?? wheelGeometry(c, c.solve({}).points, c.z0);
-  const track = 2 * g0.tcp[1];
+  // Each wheel's steer is measured from its own static toe: on a full axle the two can differ.
+  const g0L = pairs.has(0) ? leftAt(0) : g0;
+  const track = Math.abs(g0.tcp[1]) + Math.abs(g0L.tcp[1]);
   const L = p.wheelbase;
   return values.filter((v) => pairs.has(v) && pairs.has(-v)).map((v) => {
     const right = geo.get(v)!;
@@ -382,7 +386,7 @@ export function steerSweep(c: Corner, p: VehicleParams, values = range(-p.steerT
     const other = pairs.get(-v)!;
     // Toe-out on the right wheel means a turn to the right, so the right wheel is the inner one.
     const dR = right.toeSae - g0.toeSae;
-    const dL = left.toeSae - g0.toeSae;
+    const dL = left.toeSae - g0L.toeSae;
     const rightInner = dR < 0;
     const inner = rightInner ? right : left;
     const outer = rightInner ? left : right;

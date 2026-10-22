@@ -10,7 +10,7 @@ import type { ComplianceData } from '../compliance/types.js';
 import { deg, dot, mirrorY, norm, sub, type Vec3 } from '../math/vec3.js';
 import type { End, Model, VehicleParams } from '../model/types.js';
 import { Corner, type Articulation, type CornerState } from '../solver/corner.js';
-import { NONE } from '../template/types.js';
+import { GROUND, NONE } from '../template/types.js';
 import { sweepRange, sweepSolve } from './derivatives.js';
 import { f, sdfHeader } from './sdf.js';
 import { rigidRotation, relativeRotation, type M3 } from './rotation.js';
@@ -157,16 +157,19 @@ export interface JointIncrement {
   rotations: JointRotation[];
 }
 
-/** Rotations of every part of a state from the static position, indexed by part number - 1. */
+/**
+ * Rotations of every part of a state from the static position, indexed by part number - 1, then the body
+ * (ground) last. The body turns too in roll, so joints to it are measured against its rotation.
+ */
 function partRotations(c: Corner, staticPts: Vec3[], pts: Vec3[]): M3[] {
   const t = c.template;
-  return t.parts.map((_, k) => {
-    const idx = t.points.map((p, i) => (p.part1 === k + 1 || p.part2 === k + 1 ? i : -1)).filter((i) => i >= 0);
+  const of = (part: number) => {
+    const idx = t.points.map((p, i) => (p.part1 === part || p.part2 === part ? i : -1)).filter((i) => i >= 0);
     return rigidRotation(idx.map((i) => staticPts[i]), idx.map((i) => pts[i]));
-  });
+  };
+  return [...t.parts.map((_, k) => of(k + 1)), of(GROUND)];
 }
 
-const I3: M3 = [1, 0, 0, 0, 1, 0, 0, 0, 1];
 
 /** Kinematic rotation of each joint of a state, relative to the static position. */
 export function jointRotations(c: Corner, comp: ComplianceData | undefined, staticPts: Vec3[], st: CornerState): JointRotation[] {
@@ -180,8 +183,9 @@ export function jointRotations(c: Corner, comp: ComplianceData | undefined, stat
   const out: JointRotation[] = [];
   t.points.forEach((p, i) => {
     if (p.dummy || p.part1 === NONE || p.part2 === NONE) return;
-    const R1 = p.part1 > 0 ? parts[p.part1 - 1] : I3;
-    const R2 = p.part2 > 0 ? parts[p.part2 - 1] : I3;
+    const body = parts[parts.length - 1];
+    const R1 = p.part1 > 0 ? parts[p.part1 - 1] : body;
+    const R2 = p.part2 > 0 ? parts[p.part2 - 1] : body;
     const w = relativeRotation(R1, R2);
     const b = bushes.get(p.no);
     const axes = b ? bushAxes(st.points[i], resolveAxisRef(b.zAxis, st.points[i], byNo), resolveAxisRef(b.xzPlane, st.points[i], byNo)) : undefined;

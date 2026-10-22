@@ -343,3 +343,75 @@ describe('bush listings', () => {
     for (const ser of s.series) expect(Math.abs(ser.y[zero])).toBeLessThan(1e-6);
   });
 });
+
+describe('joint rotations in roll', () => {
+  it('are measured against the rolled body', async () => {
+    const { jointRotations } = await import('../src/results/listings.js');
+    const m = sampleModel('type1.dat');
+    const c = new Corner(m.front!, 'front');
+    const stat = c.solve({}).points;
+    const st = c.solve({ roll: 3 });
+    // Undo the body roll (positive roll turns the body by -roll about X), then the lower wishbone's own
+    // rotation is its rotation relative to the body.
+    const a = rad(3);
+    const undo = (p: Vec3): Vec3 => [p[0], Math.cos(a) * p[1] - Math.sin(a) * p[2], Math.sin(a) * p[1] + Math.cos(a) * p[2]];
+    const arm = c.template.points.map((p, i) => (p.part1 === 1 || p.part2 === 1 ? i : -1)).filter((i) => i >= 0);
+    const expected = rotationVector(rigidRotation(arm.map((i) => stat[i]), arm.map((i) => undo(st.points[i]))));
+    const got = jointRotations(c, undefined, stat, st).find((r) => r.point === 1)!.global;
+    // Point 1 joins the wishbone (part 1) to the body.
+    // The two can differ by the frame they are written in, never by the size of the rotation.
+    expect(Math.hypot(...got)).toBeCloseTo((Math.hypot(...expected) * 180) / Math.PI, 3);
+    expect(got[0]).toBeCloseTo((expected[0] * 180) / Math.PI, 1);
+  });
+});
+
+describe('sweep ranges', () => {
+  it('never go past the travel', async () => {
+    const { sweepRange } = await import('../src/results/derivatives.js');
+    expect(sweepRange(-45, 50, 10).at(-1)).toBe(45);
+    expect(sweepRange(-30, 30, 7).at(-1)).toBe(26);
+    expect(sweepRange(-60, 60, 20)).toEqual([-60, -40, -20, 0, 20, 40, 60]);
+    expect(sweepRange(-0.3, 0.3, 0.1).length).toBe(7);
+  });
+});
+
+describe('swing arm centre height', () => {
+  it('does not depend on whether the ground or the body moves', async () => {
+    const { defaultSolverOptions } = await import('../src/solver/options.js');
+    const m = sampleModel('Tutorial 2b.dat');
+    const rows = (motion: 'ground' | 'body') => bumpSweep(new Corner(m.front!, 'front', undefined, { ...defaultSolverOptions(), motion }), m.params, [-40, 0, 40]);
+    const g = rows('ground');
+    const b = rows('body');
+    g.forEach((r, i) => {
+      expect(b[i].swingFrontZ).toBeCloseTo(r.swingFrontZ, 6);
+      expect(b[i].swingSideZ).toBeCloseTo(r.swingSideZ, 6);
+      expect(b[i].rollCentreToBody).toBeCloseTo(r.rollCentreToBody, 6);
+    });
+  });
+});
+
+describe('steering on a full axle', () => {
+  it('measures each wheel from its own static toe', async () => {
+    const { convertPointsToAxle } = await import('../src/template/axle.js');
+    const { registerTemplate, getTemplate } = await import('../src/template/registry.js');
+    const { findGen, GenType } = await import('../src/template/types.js');
+    const base = newSuspension(1);
+    const conv = convertPointsToAxle(getTemplate(1), base.points, { slot: 61 });
+    registerTemplate(conv.template);
+    // Toe the left wheel only: move its spindle point fore-aft.
+    const spindle = conv.template.points.filter((p) => !p.dummy).findIndex((p) => p.no === findGen(conv.template, GenType.StubAxle2)!.no);
+    const points = conv.points.map((p, i): Vec3 => (i === spindle ? [p[0] + 6, p[1], p[2]] : p));
+    const c = new Corner({ templateSlot: 61, points, rollingRadius: base.rollingRadius }, 'front');
+    const m = newModel(1);
+    const [row] = steerSweep(c, m.params, [0]);
+    expect(row.steerInner).toBeCloseTo(0, 6);
+    expect(row.steerOuter).toBeCloseTo(0, 6);
+  });
+});
+
+describe('curve fits of degenerate data', () => {
+  it('give no fit instead of NaN coefficients', () => {
+    expect(fitCurve([1, 1, 1], [1, 2, 3], 2)).toBeUndefined();
+    expect(fitCurve([1, 1, 2], [1, 1, 3], 2)!.coeffs.every(Number.isFinite)).toBe(true);
+  });
+});
