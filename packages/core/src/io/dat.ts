@@ -7,7 +7,8 @@
  */
 import type { Vec3 } from '../math/vec3.js';
 import { parseTemplateLines, templateLines } from '../template/file.js';
-import { getTemplate } from '../template/registry.js';
+import { builtinTemplate, getTemplate } from '../template/registry.js';
+import { baseTemplate, isRebuiltTemplate, parseSharkTemplate, templateWithExtraPoints } from './sharkTemplate.js';
 import { dataPoints, type Template } from '../template/types.js';
 import {
   CLAUDUS_COMPLIANCE_SECTION, claudusComplianceLines, complianceLines, parseClaudusCompliance, parseCompliance, type PointOrder,
@@ -24,7 +25,9 @@ import { defaultParams, type Model, type PointGroup, type RawSection, type Suspe
 export const KNOWN_SECTIONS = [
   'VERSION', 'PARAMETERS', 'FRONT SUSPENSION', 'REAR SUSPENSION', 'TOLERANCES', 'TITLES', 'TYRE', 'BODY',
   'FORMULA', 'ROLL SOLUTION', 'GROUPS', 'COMPLIANCE', 'FORCES', 'FSETS', 'RAVEN_DEFAULTS', 'EXTENDED BUMP',
-  'COMBINED', 'USER LINES', 'USER TEMPLATES', 'CLAUDUS COMPLIANCE', 'CLAUDUS LIMITS', 'CLAUDUS STEERING', 'CLAUDUS COMBINED', 'CLAUDUS EXTENDED BUMP', 'CLAUDUS BODY', 'CLAUDUS OPTIMISER',
+  'COMBINED', 'USER LINES', 'USER TEMPLATES',
+  // Further sections of SHARK 4.03 files (names from shark.exe's section table).
+  'STEERING BOX', 'TEMP_GRAPHICS', 'TEMP_SETTINGS', 'OPTIM_SETTINGS', 'EXTENDED_TYRE', 'MODAL', 'FORCED_DAMP', 'CLAUDUS COMPLIANCE', 'CLAUDUS LIMITS', 'CLAUDUS STEERING', 'CLAUDUS COMBINED', 'CLAUDUS EXTENDED BUMP', 'CLAUDUS BODY', 'CLAUDUS OPTIMISER',
 ] as const;
 
 const PARSED = new Set(['VERSION', 'PARAMETERS', 'FRONT SUSPENSION', 'REAR SUSPENSION', 'TOLERANCES', 'TITLES', 'TYRE', 'ROLL SOLUTION', 'GROUPS', 'USER TEMPLATES', 'CLAUDUS COMPLIANCE', 'CLAUDUS LIMITS', 'CLAUDUS STEERING', 'CLAUDUS COMBINED', 'CLAUDUS EXTENDED BUMP', 'CLAUDUS BODY', 'CLAUDUS OPTIMISER']);
@@ -69,6 +72,8 @@ function parseParams(lines: string[]): VehicleParams {
   p.frontSuspensionType = s[0];
   p.rearSuspensionType = s[1];
   p.suspLineExtra = [s[2] ?? 1, s[3] ?? 1];
+  const rest = lines.slice(7);
+  if (rest.length) p.extraLines = rest;
   for (const [k, v] of Object.entries(p)) if (typeof v === 'number' && !Number.isFinite(v)) throw new DatParseError(`Bad PARAMETERS value for ${k}`);
   return p;
 }
@@ -117,9 +122,23 @@ export function readDat(text: string): Model {
   const re = get('REAR SUSPENSION');
   const titles = get('TITLES');
   const titleCount = titles ? nums(titles.lines[0])[0] ?? 0 : 0;
-  const templates = get('USER TEMPLATES') ? parseTemplateLines(get('USER TEMPLATES')!.lines, 'file') : undefined;
+  let templates = get('USER TEMPLATES') ? parseTemplateLines(get('USER TEMPLATES')!.lines, 'file') : undefined;
   const front = fr && fr.lines.some((l) => l.trim()) ? parseSuspension(fr.lines) : undefined;
   const rear = re && re.lines.some((l) => l.trim()) ? parseSuspension(re.lines) : undefined;
+  // Rows beyond the template's points (SHARK 4.03's part C of G points) get places in the template.
+  const sharkTemplates = sections.filter((s) => s.name === 'TEMP_SETTINGS').map((s) => parseSharkTemplate(s.lines));
+  [front, rear].forEach((s, k) => {
+    if (!s) return;
+    const fileOwn = templates?.find((t) => t.slot === s.templateSlot);
+    if (fileOwn && !isRebuiltTemplate(fileOwn)) return; // the file brings its own template for this slot
+    // Start from the template without points added for an earlier file.
+    const current = templateFor(s.templateSlot, templates);
+    if (!current) return;
+    const base = baseTemplate(current);
+    const own = sharkTemplates[k]?.slot === s.templateSlot ? sharkTemplates[k] : sharkTemplates.find((t) => t?.slot === s.templateSlot);
+    const t = templateWithExtraPoints(base, s.points, own) ?? (base !== current ? base : undefined);
+    if (t) templates = [...(templates ?? []).filter((x) => x.slot !== t.slot), t];
+  });
   const compliance = readCompliance(get('COMPLIANCE')?.lines, get(CLAUDUS_COMPLIANCE_SECTION)?.lines, pointOrder({ front, rear, templates }));
   // SHARK's COMBINED and EXTENDED BUMP stay in `raw` and are never rewritten (their layout is not known for
   // sure). Claudus's own sections win when present; otherwise our best-guess parse of SHARK's shows the data.
@@ -237,7 +256,9 @@ export function writeDat(m: Model): string {
   ensure('PARAMETERS', 'VERSION');
   if (m.front) ensure('FRONT SUSPENSION', 'PARAMETERS');
   if (m.rear) ensure('REAR SUSPENSION', m.front ? 'FRONT SUSPENSION' : 'PARAMETERS');
-  if (m.templates?.length && !order.includes('USER TEMPLATES')) order.push('USER TEMPLATES');
+  // Templates rebuilt from the file's own rows, and plain built-in ones, need not be saved.
+  const saveTemplates = m.templates?.filter((t) => !isRebuiltTemplate(t) && builtinTemplate(t.slot) !== t) ?? [];
+  if (saveTemplates.length && !order.includes('USER TEMPLATES')) order.push('USER TEMPLATES');
   // Edited profiles go to Claudus-only sections; a profile that is just what SHARK's section holds needs none.
   const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
   const sharkC = parseCombined(m.raw.find((r) => r.name === 'COMBINED')?.lines);
@@ -253,6 +274,7 @@ export function writeDat(m: Model): string {
   if (c && !unedited(c) && !order.includes(CLAUDUS_COMPLIANCE_SECTION)) order.splice(order.indexOf('COMPLIANCE') + 1, 0, CLAUDUS_COMPLIANCE_SECTION);
   if (m.body && !order.includes(CLAUDUS_BODY_SECTION)) order.push(CLAUDUS_BODY_SECTION);
   if (m.optimiser && !order.includes(CLAUDUS_OPTIMISER_SECTION)) order.push(CLAUDUS_OPTIMISER_SECTION);
+  const seen = new Map<string, number>();
   for (const name of order) {
     const body: string[] = [];
     switch (name) {
@@ -268,6 +290,7 @@ export function writeDat(m: Model): string {
           real(p.weightFrontPct),
           [p.frontBrakeType, p.rearBrakeType, ...p.brakeLineExtra].map(int).join(''),
           [p.frontSuspensionType, p.rearSuspensionType, ...p.suspLineExtra].map(int).join(''),
+          ...(p.extraLines ?? []),
         );
         break;
       case 'FRONT SUSPENSION':
@@ -291,8 +314,8 @@ export function writeDat(m: Model): string {
         body.push(int(m.rollSolution));
         break;
       case 'USER TEMPLATES':
-        if (!m.templates?.length) continue;
-        body.push(...templateLines(m.templates));
+        if (!saveTemplates.length) continue;
+        body.push(...templateLines(saveTemplates));
         break;
       case 'COMPLIANCE': {
         const raw = m.raw.find((r) => r.name === name);
@@ -339,7 +362,10 @@ export function writeDat(m: Model): string {
         }
         break;
       default: {
-        const raw = m.raw.find((r) => r.name === name);
+        // A name can appear more than once (SHARK writes TEMP_SETTINGS for each end): take them in turn.
+        const nth = seen.get(name) ?? 0;
+        seen.set(name, nth + 1);
+        const raw = m.raw.filter((r) => r.name === name)[nth];
         if (!raw) continue;
         body.push(...raw.lines);
       }

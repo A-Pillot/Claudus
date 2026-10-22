@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import { Html, Line, OrbitControls, GizmoHelper, GizmoViewport } from '@react-three/drei';
 import * as THREE from 'three';
-import { boxPositions, limitOf, Corner, GenType, GROUND, findGen, mirrorY, solveAxle, type AxleState, type FreeBody, type ComplianceResult, type Vec3 } from '@claudus/core';
+import { boxPositions, limitOf, Corner, GenType, GROUND, findGen, hasGen, mirrorY, solveAxle, type AxleState, type FreeBody, type ComplianceResult, type Vec3 } from '@claudus/core';
 import { beginEdit, endEdit, useApp } from '../store';
 import { useModes } from '../modes';
 import { coincidentWith, movePoint, pickable, trackingAxes, useEdit } from '../editing';
@@ -18,9 +18,13 @@ import { CogScene,ComplianceScene, FreeBodyForces } from './ComplianceScene';
 const MM = 0.001; // scene units are metres
 const DYN_BUTTON = { rotate: THREE.MOUSE.ROTATE, pan: THREE.MOUSE.PAN, zoom: THREE.MOUSE.DOLLY } as const;
 
+/** Indexes of the part C of G points, which SHARK only draws in compliant mode. */
+const cogPoints = (corner: Corner) => new Set(corner.template.points.flatMap((tp, i) => (hasGen(tp, GenType.PartCofG) ? [i] : [])));
+
 /** Points that should all be in view after Autoscale, in scene units (metres, centred on the axle). */
-function fitPoints(state: AxleState, origin: Vec3, radius: number, wheels: number[]): Vec3[] {
-  const all = [...state.right.points, ...(state.leftMirror ? state.leftMirror.points.map(mirrorY) : [])];
+function fitPoints(state: AxleState, origin: Vec3, radius: number, wheels: number[], skip: Set<number>): Vec3[] {
+  const keep = (pts: Vec3[]) => pts.filter((_, i) => !skip.has(i));
+  const all = [...keep(state.right.points), ...(state.leftMirror ? keep(state.leftMirror.points.map(mirrorY)) : [])];
   const out: Vec3[] = all.map((p) => [(p[0] - origin[0]) * MM, p[1] * MM, (p[2] - origin[2]) * MM]);
   // The tyres reach beyond the hard points.
   for (const w of wheels) {
@@ -283,7 +287,7 @@ export function Viewer3D({ corner, state, detail, ghosts, freeBody }: Props) {
         {view.triad && <axesHelper args={[300]} />}
       </group>
       <OrbitControls makeDefault target={[0, 0, 0.25]} mouseButtons={{ LEFT: DYN_BUTTON[vc.dyn], MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }} />
-      <CameraRig fitPoints={fitPoints(state, origin, corner.radius, corner.sides.map((w) => w.wc))} />
+      <CameraRig fitPoints={fitPoints(state, origin, corner.radius, corner.sides.map((w) => w.wc), compliant ? new Set() : cogPoints(corner))} />
       <FillStyleApplier />
       <GizmoHelper alignment="bottom-right" margin={[60, 60]}>
         <GizmoViewport axisColors={['#e15759', '#59a14f', '#4e79a7']} labelColor="#fff" />
@@ -327,6 +331,7 @@ function Side({ corner, points, mirrored, origin }: { corner: Corner; points: Ve
   const idx = (no: number) => corner.mech.index.get(no)!;
   const view = useApp((s) => s.view);
   const addMode = useApp((s) => s.addMode);
+  const compliant = useApp((s) => s.compliant);
   const vc = useViewCtl();
   const edit = useEdit();
   const { camera, gl } = useThree();
@@ -429,6 +434,7 @@ function Side({ corner, points, mirrored, origin }: { corner: Corner; points: Ve
       ))}
       {t.points.map((tp, i) => {
         if (tp.dummy) return null;
+        if (!compliant && hasGen(tp, GenType.PartCofG)) return null; // C of G points: compliant mode only, as in SHARK
         const isGround = tp.part1 === GROUND || tp.part2 === GROUND;
         if (isGround && !vc.showBody) return null;
         const sel = !mirrored && selected === i;

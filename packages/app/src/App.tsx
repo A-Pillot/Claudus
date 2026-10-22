@@ -99,7 +99,7 @@ export function App() {
         </Tabs>
         <div className="scroll">
           <ErrorBoundary resetKey={analysis.results}>
-            {bottom === 'graphs' ? <Graphs results={analysis.results} tolerance={tolerance.result} /> : <SdfView analysis={analysis} />}
+            {bottom === 'graphs' ? <Graphs results={analysis.results} tolerance={tolerance.result} failed={!analysis.busy && !!analysis.error} /> : <SdfView analysis={analysis} />}
           </ErrorBoundary>
         </div>
       </section>

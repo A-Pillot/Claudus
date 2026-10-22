@@ -5,7 +5,7 @@ import { useApp } from '../store';
 
 export function SdfView({ analysis }: { analysis: AnalysisState }) {
   const name = useApp((s) => s.fileName);
-  const { results, model } = analysis;
-  const text = useMemo(() => (results && model ? formatSdf(model, results, name) : 'Calculating…'), [model, results, name]);
+  const { results, model, error, busy } = analysis;
+  const text = useMemo(() => (results && model ? formatSdf(model, results, name) : !busy && error ? `No listing: ${error}` : 'Calculating…'), [model, results, name, busy, error]);
   return <pre className="sdf">{text}</pre>;
 }

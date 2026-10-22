@@ -5,6 +5,7 @@ import { basename } from 'node:path';
 import { readDat } from './io/dat.js';
 import { analyse } from './results/derivatives.js';
 import { formatSdf } from './results/sdf.js';
+import { registerTemplate } from './template/registry.js';
 
 const [file, out] = process.argv.slice(2);
 if (!file) {
@@ -12,6 +13,8 @@ if (!file) {
   process.exit(1);
 }
 const model = readDat(readFileSync(file, 'utf8'));
+// Templates the file brings (or that its rows need) are used for this model, as in the app.
+model.templates?.forEach(registerTemplate);
 const text = formatSdf(model, analyse(model), basename(file));
 if (out) writeFileSync(out, text);
 else process.stdout.write(text);
