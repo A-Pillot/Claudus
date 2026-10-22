@@ -50,7 +50,7 @@ export function TransferDialog({ mode, format, onClose }: { mode: TransferMode; 
   }, [model, end, text, format, settings, labels, slot, mode, data, tpl, switchOk]);
 
   const openFile = async () => {
-    const f = await files().open(format === 'adams' ? '.sub,.txt' : '.txt,.csv,.dat');
+    const f = await files().open(format === 'adams' ? '.sub,.txt' : '.txt,.csv,.dat,.shk');
     if (f) {
       setName(f.name);
       setText(f.text);

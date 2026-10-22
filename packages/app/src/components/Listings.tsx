@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { create } from 'zustand';
-import {
+import { modelBaseName,
   ballJointSeries, getTemplate, defaultSplineOptions, formatSplineData, formatSplineFits, listJointResults, listPointAtAllPositions, listPointsAtPosition,
   listPointsForUserPosition, MOTION_LABEL, MOTION_UNIT, MOTIONS, motionValues, SWEEP_VARIABLES,
   type EndAnalysis, type JointListing, type Motion, type RotationFrame, type SplineOptions, type SweepKind,
@@ -65,7 +65,7 @@ function TextWindow({ id, text, children }: { id: ListingId; text: string; child
     }
     setTimeout(() => setNote(''), 2500);
   };
-  const save = () => files().save(name.replace(/\.dat$/i, '') + '-' + FILE_NAMES[id], text);
+  const save = () => files().save(modelBaseName(name) + '-' + FILE_NAMES[id], text);
   return (
     <>
       {children}

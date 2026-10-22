@@ -10,6 +10,7 @@ import { VIEW_AXES, VIEW_DIR, cameraApi, cycleDyn, isOrtho, setCameraApi, useVie
 import { pickPoint } from '../graphicsActions';
 import { fmtUnit, useUnitSettings } from '../units';
 import { registerCanvas } from '../video';
+import { currentAxes, leaveStdView, spaceMouseStep, useSpaceMouse } from '../spacemouse';
 import { GraphicElements } from './GraphicShapes';
 import { BodyGraphics } from './BodyGraphics';
 import { CogScene,ComplianceScene, FreeBodyForces } from './ComplianceScene';
@@ -140,6 +141,20 @@ function CameraRig({ fitPoints: pts }: { fitPoints: Vec3[] }) {
     el.addEventListener('contextmenu', ctx);
     return () => { el.removeEventListener('pointerdown', pd); el.removeEventListener('contextmenu', ctx); };
   }, [gl]);
+
+  // SpaceMouse: move the camera every frame while the cap is pushed.
+  useFrame((_, dt) => {
+    const c = controls as unknown as OrbitLike | null;
+    const axes = c && currentAxes(useSpaceMouse.getState().settings);
+    if (!c || !axes) return;
+    const e = camera.matrixWorld.elements;
+    const next = spaceMouseStep(axes, Math.min(dt, 0.1), camera.position.toArray() as Vec3, c.target.toArray() as Vec3,
+      [e[0], e[1], e[2]], [e[4], e[5], e[6]], useSpaceMouse.getState().settings);
+    c.target.set(...next.target);
+    camera.position.set(...next.position);
+    c.update();
+    leaveStdView();
+  });
 
   // Start with the whole suspension in view.
   useFrame(() => {

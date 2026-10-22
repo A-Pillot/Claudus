@@ -48,7 +48,7 @@ export function TemplateMenu({ onError }: { onError: (msg: string | null) => voi
     applyTemplate(out.template, out.points);
   });
   const loadFile = run(async () => {
-    const f = await files().open('.dat,.tpl,.txt');
+    const f = await files().open('.dat,.shk,.tpl,.txt');
     if (!f) return;
     try {
       const list = parseTemplates(f.text, 'user');

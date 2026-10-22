@@ -11,6 +11,7 @@ export * from './template/registry.js';
 export * from './model/types.js';
 export * from './model/extras.js';
 export * from './io/dat.js';
+export * from './io/modelFile.js';
 export * from './solver/mechanism.js';
 export * from './solver/corner.js';
 export * from './graphics/elements.js';

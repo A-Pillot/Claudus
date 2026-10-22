@@ -7,6 +7,8 @@ import { useUnits } from '../units';
 import { Dlg } from './ComplianceDialogs';
 import { STD_VIEWS, cameraApi, useViewCtl, type FillStyle } from '../viewCtl';
 import { DisplayDialog, SavedViewsDialog, copyViewImage, saveViewImage } from './ViewControls';
+import { SpaceMouseDialog } from './SpaceMouseDialog';
+import { useSpaceMouse } from '../spacemouse';
 
 /** SHARK's View menu: Change Units. */
 export function ViewMenu() {
@@ -15,6 +17,8 @@ export function ViewMenu() {
   const [display, setDisplay] = useState(false);
   const [saved, setSaved] = useState(false);
   const [note, setNote] = useState('');
+  const [mouse3d, setMouse3d] = useState(false);
+  const smDevice = useSpaceMouse((s) => s.device);
   const vc = useViewCtl();
   const ref = useRef<HTMLDivElement>(null);
 
@@ -41,6 +45,7 @@ export function ViewMenu() {
             </button>
           ))}
           <button onClick={() => { setOpen(false); setSaved(true); }}>Saved views…</button>
+          <button onClick={() => { setOpen(false); setMouse3d(true); }}>SpaceMouse…{smDevice ? ' (connected)' : ''}</button>
           <hr />
           <div className="menuhead">Fill style</div>
           {(['solid', 'wireframe', 'hidden'] as FillStyle[]).map((f) => (
@@ -60,6 +65,7 @@ export function ViewMenu() {
       {units && <UnitsDialog onClose={() => setUnits(false)} />}
       {display && <DisplayDialog onClose={() => setDisplay(false)} />}
       {saved && <SavedViewsDialog onClose={() => setSaved(false)} />}
+      {mouse3d && <SpaceMouseDialog onClose={() => setMouse3d(false)} />}
     </div>
   );
 }
